@@ -1,0 +1,3 @@
+import type {Metadata} from 'next';import '@fontsource/inter/400.css';import '@fontsource/inter/500.css';import '@fontsource/inter/600.css';import '@fontsource/inter/700.css';import './globals.css';import {Session} from '@/components/session';import {Shell} from '@/components/shell';
+export const metadata:Metadata={title:{default:'McGill Matched — A little common ground',template:'%s | McGill Matched'},description:'Meet a fellow McGill student through shared interests, a time that works, and a low-pressure hello.',robots:{index:false,follow:false}};
+export default function Layout({children}:{children:React.ReactNode}){return <html lang="en"><body><Session><Shell>{children}</Shell></Session></body></html>;}
