@@ -166,6 +166,68 @@ Only the requested page routes are implemented. No separate login or admin page.
 
 Footer pages stay out of the main navigation; agreement links also appear where needed at signup. Member pages show no member data before the auth check and redirect logged-out users to Join with a safe return path. Data authorization is enforced by Firestore and API checks, independently of that client redirect.
 
+## GitHub and Codespaces workflow for collaborators
+
+Each collaborator gets their own Codespace. A Codespace is an online VS Code workspace connected to this repository. Everyone works on the same project, but changes are not shared until they are committed and pushed to GitHub.
+
+### First time: create your Codespace
+
+1. Open the GitHub repository.
+2. Click **Code** → **Codespaces** → **Create codespace on main**.
+3. Wait for the browser VS Code window to open.
+4. Open the terminal with **Terminal** → **New Terminal**.
+5. Install the project packages once:
+
+```sh
+npm install
+```
+
+### Before starting work: pull the newest code
+
+Always do this before editing:
+
+```sh
+git pull origin main
+```
+
+This downloads changes that other collaborators have pushed.
+
+### Save and push your work
+
+After editing and testing files:
+
+```sh
+git add .
+git commit -m "Describe what you changed"
+git push origin main
+```
+
+What these commands mean:
+
+- `git add .` prepares your changed files.
+- `git commit` saves a named version locally.
+- `git push` uploads your commit to GitHub.
+
+Pushing to `main` causes Vercel to deploy the newest version automatically. Do not commit `.env.local`, passwords, Firebase service-account JSON files, `node_modules`, or `.next`.
+
+### If someone pushed while you were working
+
+If `git push` is rejected, download their changes first:
+
+```sh
+git pull origin main
+```
+
+If Git reports a conflict, stop and ask the team member who owns the affected file for help. Do not delete another person's changes just to make the error disappear.
+
+### Simple team rule
+
+Before working: `git pull origin main`
+
+After working: `git add .`, `git commit`, `git push`
+
+If several people are making large changes at the same time, create a branch instead of pushing directly to `main`, then open a pull request on GitHub for the team to review.
+
 ## Verification
 
 ```sh
