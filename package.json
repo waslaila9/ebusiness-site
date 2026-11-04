@@ -7,10 +7,10 @@
     "build": "next build --webpack",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test tests/*.test.ts",
-    "seed": "node --env-file=.env.local --import tsx scripts/seed.ts",
-    "match": "node --env-file=.env.local --import tsx scripts/match.ts",
-    "notify": "node --env-file=.env.local --import tsx scripts/notify.ts"
+    "test": "node --import tsx --test matching.test.ts",
+    "seed": "node --env-file=.env.local --import tsx seed.ts",
+    "match": "node --env-file=.env.local --import tsx match.ts",
+    "notify": "node --env-file=.env.local --import tsx notify.ts"
   },
   "dependencies": {
     "next": "16.4.3",

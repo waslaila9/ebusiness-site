@@ -3,7 +3,7 @@ service cloud.firestore {
  match /databases/{database}/documents {
   function member() {
    return request.auth != null && request.auth.token.email_verified == true
-    && request.auth.token.email.matches('^[^@]+@(mail[.])?mcgill[.]ca$')
+    && request.auth.token.email.matches('^[^@]+@mail[.]mcgill[.]ca$')
     && exists(/databases/$(database)/documents/accounts/$(request.auth.uid));
   }
   match /profiles/{uid} { allow get: if member() && request.auth.uid == uid; }

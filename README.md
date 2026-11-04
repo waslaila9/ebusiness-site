@@ -31,7 +31,7 @@ Use Vercel for this project rather than GitHub Pages: it needs Next.js server ro
 
 ## Demo walkthrough
 
-- Join with any syntactically valid McGill address and check the draft agreement box. No email is sent.
+- Join with any syntactically valid `@mail.mcgill.ca` address and check the draft agreement box. No email is sent.
 - Click **Continue in demo mode**, then **Simulate verified sign-in**.
 - Complete the nine-question profile. Instagram can be a fictional handle.
 - Matching runs locally against a small simulated batch of three compatible fictional students drawn from twelve fixtures. This keeps the one-person demo useful; the real batch runner considers all eligible profiles.
@@ -44,7 +44,7 @@ Use Vercel for this project rather than GitHub Pages: it needs Next.js server ro
 
 ## Connect real Firebase data and email sign-in
 
-Do this in a test project before inviting real students. Keep legal/safety/venue placeholders visible until reviewed; configure a monitored support address before real use.
+Do this in a test project before inviting real students. Review the legal, safety, and venue copy with the team; configure a monitored support address before real use.
 
 ### A. Create the project and web app
 
@@ -79,7 +79,7 @@ If only some public config fields are filled, the app fails closed with a setup 
 
 ### C. Test real sign-in
 
-Use your own McGill address. Open the latest email link and confirm your address and agreement on the Check your McGill inbox page. This also works in a different browser. Expired/used links go to the specified error page. Return paths are restricted to member pages.
+Use your own `@mail.mcgill.ca` address. Open the latest email link and confirm your address and agreement on the Check your McGill inbox page. This also works in a different browser. Expired/used links go to the specified error page. Return paths are restricted to member pages.
 
 Firebase's documented Spark quota is **5 email-link sign-in emails per day, including resends**. A team of five can use that quickly. Keep routine UI testing in demo mode. Beyond that limit, changing authentication or adding billing is a separate team decision; this project does not do either automatically.
 

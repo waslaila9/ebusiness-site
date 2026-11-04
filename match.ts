@@ -1,4 +1,4 @@
-import {admin} from '../lib/admin';import {pairProfiles} from '../lib/matching';import {Profile,contactOf} from '../lib/model';
+import {admin} from './admin';import {pairProfiles} from './matching';import {Profile,contactOf} from './model';
 async function main(){
 const {db}=admin();
 const count=await db.runTransaction(async tx=>{

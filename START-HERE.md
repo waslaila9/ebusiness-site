@@ -18,4 +18,4 @@ npm run dev
 
 For a quick demo: Join → valid McGill-formatted email + draft agreement → Simulate verified sign-in → fill profile → My matches → Accept → Demo: simulate their acceptance → You both said yes.
 
-Demo mode uses fictional students and sends no emails. Real Firebase integration still needs your team's credentials and testing. Firebase Spark currently limits email-link sign-in emails to 5/day, including resends. Safety, legal and venue placeholders need review before real use.
+Demo mode uses fictional students and sends no emails. Real Firebase integration still needs your team's credentials and testing. Firebase Spark currently limits email-link sign-in emails to 5/day, including resends. Safety, legal, and venue copy should be reviewed before real use.

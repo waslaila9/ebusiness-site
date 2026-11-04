@@ -1,9 +1,9 @@
 'use client';
 import {createContext,useContext,useEffect,useState,ReactNode} from 'react';
 import {onAuthStateChanged,signOut} from 'firebase/auth';
-import {auth,demo,incomplete} from '@/lib/firebase';
-import {User,isMcGill} from '@/lib/model';
-import {local,write} from '@/lib/client';
+import {auth,demo,incomplete} from './firebase';
+import {User,isMcGill} from './model';
+import {local,write} from './client';
 const Context=createContext<{user:User|null;ready:boolean;logout:()=>Promise<void>}>({user:null,ready:false,logout:async()=>{}});
 export const useSession=()=>useContext(Context);
 export function Session({children}:{children:ReactNode}){
