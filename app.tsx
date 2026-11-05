@@ -107,10 +107,7 @@ function Home() {
             familiar face on campus.
           </p>
           <div className="actions">
-            <Link
-              href={user ? "/matches" : "/join"}
-              className={user ? "button" : "button home-join"}
-            >
+            <Link href={user ? "/matches" : "/join"} className="button">
               {user ? "My matches" : "Join"} <span aria-hidden="true">↗</span>
             </Link>
             <Link className="quiet-link" href="#how-it-works">
