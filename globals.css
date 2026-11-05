@@ -281,6 +281,14 @@ nav a[aria-current]:after {
   background: var(--link);
   border-color: var(--link);
 }
+.button.home-join {
+  background: #1769aa;
+  border-color: #1769aa;
+}
+.button.home-join:hover {
+  background: #0f5188;
+  border-color: #0f5188;
+}
 .secondary {
   background: white;
   color: var(--link);
