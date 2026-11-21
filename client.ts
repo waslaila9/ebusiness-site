@@ -177,6 +177,9 @@ export async function decide(
   if (m.decisions[uid] !== "pending") throw new Error("You already decided.");
   m.decisions[uid] = decision;
   s.events.push({ type: "O3", at: Date.now() });
+  if (bothAccepted(m) && !s.events.some((event) => event.type === "mutual_accept")) {
+    s.events.push({ type: "mutual_accept", at: Date.now() });
+  }
   write(s);
 }
 export async function contacts(m: Match): Promise<Contact[]> {
@@ -204,6 +207,9 @@ export function demoOtherAccept(id: string, uid: string) {
   m.members
     .filter((x) => x !== uid)
     .forEach((x) => (m.decisions[x] = "accept"));
+  if (bothAccepted(m) && !s.events.some((event) => event.type === "mutual_accept")) {
+    s.events.push({ type: "mutual_accept", at: Date.now() });
+  }
   write(s);
 }
 export async function report(message: string) {

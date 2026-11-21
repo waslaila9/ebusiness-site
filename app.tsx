@@ -246,12 +246,13 @@ function Join() {
       setReminder(sessionStorage.getItem("join-reminder") === "true");
       if (demo) {
         const state = local();
-        setHasLocalSession(!!state.user);
-        setReturningProfile(
-          state.user
+        const profile =
+          state.profiles.find((p) => p.uid === "demo-you") ||
+          (state.user
             ? state.profiles.find((p) => p.uid === state.user!.uid) || null
-            : null,
-        );
+            : null);
+        setHasLocalSession(!!profile);
+        setReturningProfile(profile);
       }
     } catch {}
   }, []);

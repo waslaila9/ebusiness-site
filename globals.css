@@ -27,6 +27,15 @@ a {
   color: var(--link);
   text-underline-offset: 4px;
 }
+p a,
+.note a,
+.panel a,
+.profile-summary a,
+.candidate-card a,
+.decision-panel a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}
 button,
 input,
 select,
