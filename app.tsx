@@ -37,6 +37,8 @@ import {
   resetDemoCandidates,
   request,
   report,
+  local,
+  recordDemoEvent,
 } from "./client";
 import { useSession } from "./session";
 const support = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
@@ -231,33 +233,74 @@ function Join() {
     { user } = useSession();
   const [email, setEmail] = useState(""),
     [consent, setConsent] = useState(false),
+    [reminder, setReminder] = useState(false),
     [errors, setErrors] = useState<Record<string, string>>({}),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [login, setLogin] = useState(false);
+    [login, setLogin] = useState(false),
+    [returningProfile, setReturningProfile] = useState<Profile | null>(null),
+    [hasLocalSession, setHasLocalSession] = useState(false);
   useEffect(() => {
     const q = new URLSearchParams(location.search);
     setLogin(q.has("login"));
     try {
       setEmail(sessionStorage.getItem("join-email") || "");
       setConsent(sessionStorage.getItem("join-consent") === "true");
+      setReminder(sessionStorage.getItem("join-reminder") === "true");
+      if (demo) {
+        const state = local();
+        setHasLocalSession(!!state.user);
+        setReturningProfile(
+          state.user
+            ? state.profiles.find((p) => p.uid === state.user!.uid) || null
+            : null,
+        );
+      }
     } catch {}
   }, []);
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
+    const normalizedEmail = email.trim().toLowerCase();
     const errs: Record<string, string> = {};
-    if (!email) errs.email = "Add your McGill email.";
-    else if (!isMcGill(email)) errs.email = "Use an @mail.mcgill.ca address.";
-    if (!consent) errs.consent = "Please agree before continuing.";
+    if (!normalizedEmail) {
+      errs.email = "Add your McGill email.";
+      recordDemoEvent("join_error");
+      recordDemoEvent("join_error:non_mcgill_email");
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      errs.email = "Enter a complete email address, such as you@mail.mcgill.ca.";
+      recordDemoEvent("join_error");
+      recordDemoEvent("join_error:non_mcgill_email");
+    } else if (!isMcGill(normalizedEmail)) {
+      errs.email =
+        "Use the exact @mail.mcgill.ca student domain, such as you@mail.mcgill.ca.";
+      recordDemoEvent("join_error");
+      recordDemoEvent("join_error:non_mcgill_email");
+    }
+    if (!consent) {
+      errs.consent =
+        "Consent is required. Agree to the Privacy policy and Terms of use.";
+      recordDemoEvent("join_error");
+      recordDemoEvent("join_error:consent_unticked");
+    }
     setErrors(errs);
     setError("");
-    if (Object.keys(errs).length) return;
+    if (Object.keys(errs).length) {
+      requestAnimationFrame(() =>
+        document
+          .getElementById(errs.email ? "email" : "consent")
+          ?.focus(),
+      );
+      return;
+    }
     setBusy(true);
     try {
-      sessionStorage.setItem("join-email", email.trim().toLowerCase());
-      sessionStorage.setItem("join-consent", "true");
+      sessionStorage.setItem("join-email", normalizedEmail);
+      sessionStorage.setItem("join-consent", consent ? "true" : "false");
+      sessionStorage.setItem("join-reminder", reminder ? "true" : "false");
       const next = safeNext(new URLSearchParams(location.search).get("next"));
       sessionStorage.setItem("join-next", next);
+      recordDemoEvent("sign_up");
       if (demo) {
         router.push("/join/check-inbox");
         return;
@@ -285,9 +328,39 @@ function Join() {
       <h1>Join</h1>
       <p className="lead">
         {login
-          ? "Welcome back. We’ll email you a sign-in link."
+          ? "Welcome back. Resume your browser-local demo if you left a profile or match here."
           : "A familiar face can change your whole week."}
       </p>
+      {login && demo && (
+        <div className="panel">
+          {hasLocalSession ? (
+            <>
+              <h2>Your demo profile is here</h2>
+              <p>
+                {returningProfile?.completed
+                  ? "Resume your completed profile and My matches."
+                  : "Resume the profile you started in this browser."}
+              </p>
+              <button
+                type="button"
+                className="button"
+                onClick={() =>
+                  router.push(
+                    returningProfile?.completed ? "/matches" : "/profile",
+                  )
+                }
+              >
+                Resume my demo
+              </button>
+            </>
+          ) : (
+            <>
+              <h2>No demo session is saved here yet</h2>
+              <p>You can join below to create a fictional browser-local profile.</p>
+            </>
+          )}
+        </div>
+      )}
       {user && (
         <Note>
           You’re already signed in.{" "}
@@ -302,15 +375,18 @@ function Join() {
           autoComplete="email"
           placeholder="you@mail.mcgill.ca"
           value={email}
+          onBlur={(e) =>
+            setEmail(e.target.value.trim().toLowerCase())
+          }
           onChange={(e) => setEmail(e.target.value)}
           aria-invalid={!!errors.email}
           aria-describedby="email-help email-error"
         />
         <p id="email-help" className="field-help">
-          We use your email to verify you’re a McGill student. No password to
-          remember.
+          Use an @mail.mcgill.ca address, such as you@mail.mcgill.ca. This
+          demo checks the address format and sends no emails.
         </p>
-        <div id="email-error">
+        <div id="email-error" role="alert">
           {errors.email && (
             <p className="error">
               {errors.email} <Link href="/join/error">Need help?</Link>
@@ -319,9 +395,11 @@ function Join() {
         </div>
         <label className="check">
           <input
+            id="consent"
             type="checkbox"
             checked={consent}
             onChange={(e) => setConsent(e.target.checked)}
+            aria-invalid={!!errors.consent}
             aria-describedby="consent-error"
           />
           <span>
@@ -337,10 +415,25 @@ function Join() {
           </span>
         </label>
         {errors.consent && (
-          <p id="consent-error" className="error">
+          <p id="consent-error" className="error" role="alert">
             {errors.consent}
           </p>
         )}
+        <label className="check">
+          <input
+            id="reminder"
+            type="checkbox"
+            checked={reminder}
+            onChange={(e) => setReminder(e.target.checked)}
+            aria-describedby="reminder-help"
+          />
+          <span>
+            Send me a profile reminder
+            <small id="reminder-help">
+              Optional. This demo sends no reminders or emails.
+            </small>
+          </span>
+        </label>
         <ErrorBox message={error} />
         <button className="button full" disabled={busy}>
           {busy
@@ -484,11 +577,14 @@ function Inbox() {
       {demo && (
         <button
           className="button"
+          disabled={busy}
           onClick={() => {
+            if (busy) return;
             if (!isMcGill(email) || !consent) {
               router.push("/join");
               return;
             }
+            setBusy(true);
             demoLogin(email);
             router.push(safeNext(sessionStorage.getItem("join-next")));
           }}

@@ -46,6 +46,12 @@ export function write(s: State) {
   localStorage.setItem(key, JSON.stringify(s));
   window.dispatchEvent(new Event("demo-auth"));
 }
+export function recordDemoEvent(type: string) {
+  if (!demo) return;
+  const s = local();
+  s.events.push({ type, at: Date.now() });
+  write(s);
+}
 export function demoLogin(email: string) {
   const s = local();
   s.user = { uid: "demo-you", email };

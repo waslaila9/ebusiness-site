@@ -715,7 +715,7 @@ textarea {
   display: block;
   width: 100%;
   min-height: 48px;
-  border: 1px solid #d9d3d0;
+  border: 1px solid #80716d;
   border-radius: 7px;
   padding: 12px 14px;
   background: #fff;
@@ -738,6 +738,11 @@ input[aria-invalid="true"] {
   margin: 24px 0;
   min-height: 44px;
   cursor: pointer;
+}
+.check a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 .check input {
   margin-top: 5px;
