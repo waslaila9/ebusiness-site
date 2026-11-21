@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useState, ReactNode } from "react";
+import { FormEvent, useEffect, useRef, useState, ReactNode } from "react";
 import {
   sendSignInLinkToEmail,
   isSignInWithEmailLink,
@@ -17,11 +17,8 @@ import {
   safeNext,
   validateProfile,
   interests,
-  values,
   days,
   times,
-  programCategories,
-  socialStyles,
   bothAccepted,
 } from "./model";
 import {
@@ -302,7 +299,8 @@ function Join() {
       sessionStorage.setItem("join-next", next);
       recordDemoEvent("sign_up");
       if (demo) {
-        router.push("/join/check-inbox");
+        demoLogin(normalizedEmail);
+        router.push(next);
         return;
       }
       if (!auth || incomplete)
@@ -631,14 +629,16 @@ function ProfileForm() {
     [busy, setBusy] = useState(false),
     [loaded, setLoaded] = useState(false),
     [saved, setSaved] = useState(false),
-    [editing, setEditing] = useState(false);
+    [editing, setEditing] = useState(false),
+    [formStarted, setFormStarted] = useState(false);
+  const visibilityRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!user) return;
     getProfile(user.uid)
       .then((x) => {
         if (x) {
           setP({ ...blankProfile(user.uid), ...x, uid: user.uid });
-          setSaved(true);
+          setSaved(x.completed && Object.keys(validateProfile(x)).length === 0);
         } else {
           try {
             const draft = JSON.parse(
@@ -659,7 +659,26 @@ function ProfileForm() {
         setError("Could not load your profile. Refresh to try again.");
       });
   }, [user]);
+  useEffect(() => {
+    if (!loaded || !visibilityRef.current) return;
+    const element = visibilityRef.current;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          recordDemoEvent("visibility_note_view");
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.8 },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [loaded]);
   function update<K extends keyof Profile>(key: K, value: Profile[K]) {
+    if (!formStarted) {
+      setFormStarted(true);
+      recordDemoEvent("form_start");
+    }
     const next = { ...p, [key]: value };
     setP(next);
     try {
@@ -670,13 +689,27 @@ function ProfileForm() {
     } catch {}
   }
   function toggle(key: "interests" | "values" | "availability", v: string) {
+    const isSelected = p[key].includes(v);
+    if (!isSelected && key === "interests" && p.interests.length >= 10) {
+      setErrors((current) => ({
+        ...current,
+        interests: "Choose up to 10 interests.",
+      }));
+      return;
+    }
+    setErrors((current) => {
+      const next = { ...current };
+      delete next.interests;
+      return next;
+    });
     update(
       key,
-      p[key].includes(v) ? p[key].filter((x) => x !== v) : [...p[key], v],
+      isSelected ? p[key].filter((x) => x !== v) : [...p[key], v],
     );
   }
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     const errs = validateProfile(p);
     setErrors(errs);
     if (Object.keys(errs).length) {
@@ -688,7 +721,8 @@ function ProfileForm() {
     try {
       await saveProfile(p);
       sessionStorage.removeItem("profile-draft-" + user!.uid);
-      router.push("/profile/saved");
+      recordDemoEvent("profile_complete");
+      router.push("/matches");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save. Try again.");
     } finally {
@@ -705,10 +739,14 @@ function ProfileForm() {
     <section className="form-page page">
       <Back href="/matches">My matches</Back>
       <h1>My profile</h1>
-      <Note>
-        Only your match sees your answers, and only the parts shown on the match
-        card. Nobody can browse profiles.
-      </Note>
+      <div ref={visibilityRef}>
+        <Note>
+          <strong>Who sees this?</strong> Answers you save can appear on the
+          match card shown to your assigned match. The demo cannot guarantee
+          real account identity or browsing security. Contact sharing is a
+          separate step only after mutual acceptance.
+        </Note>
+      </div>
       <p className="lead">A few things about you. A better starting point.</p>
       {!loaded ? (
         <>
@@ -724,12 +762,12 @@ function ProfileForm() {
           </p>
           <div className="profile-summary">
             <p>
-              <strong>{p.name}</strong> · {p.programCategory} · {p.program} ·
-              Year {p.year}
+              <strong>{p.name}</strong>
             </p>
-            {p.about && <p>{p.about}</p>}
-            <p>{p.interests.join(" · ")}</p>
             <p>Looking for: {p.looking}</p>
+            <p>Interests: {p.interests.join(" · ")}</p>
+            <p>Availability: {p.availability.join(" · ")}</p>
+            {p.about && <p>{p.about}</p>}
           </div>
           <button
             className="button secondary"
@@ -749,7 +787,7 @@ function ProfileForm() {
         <form onSubmit={submit} noValidate>
           <div className="form-question">
             <label htmlFor="name">
-              <span>01</span> What should we call you?
+              <span>01</span> First name <span aria-hidden="true">(required)</span>
             </label>
             <input
               id="name"
@@ -762,104 +800,35 @@ function ProfileForm() {
             />
             {err("name")}
           </div>
-          <div className="form-question">
-            <label htmlFor="programCategory">
-              <span>02</span> What broad area are you studying?
-            </label>
-            <select
-              id="programCategory"
-              value={p.programCategory}
-              onChange={(e) => update("programCategory", e.target.value)}
-              aria-invalid={!!errors.programCategory}
-              aria-describedby="programCategory-error"
-            >
-              <option value="">Choose an area</option>
-              {programCategories.map((x) => (
-                <option key={x} value={x}>
-                  {x}
-                </option>
-              ))}
-            </select>
-            {err("programCategory")}
-            <label htmlFor="program">
-              <span>03</span> What is your specific program?
-            </label>
-            <input
-              id="program"
-              placeholder="e.g. Political Science"
-              maxLength={100}
-              value={p.program}
-              onChange={(e) => update("program", e.target.value)}
-              aria-invalid={!!errors.program}
-              aria-describedby="program-error"
-            />
-            {err("program")}
-          </div>
-          <div className="form-question">
-            <label htmlFor="year">
-              <span>04</span> Which year are you in?
-            </label>
-            <select
-              id="year"
-              value={p.year}
-              onChange={(e) => update("year", e.target.value)}
-              aria-invalid={!!errors.year}
-              aria-describedby="year-error"
-            >
-              <option value="">Choose your year</option>
-              {["1", "2", "3", "4", "5+", "Graduate"].map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
-            {err("year")}
-          </div>
-          <div className="form-question">
-            <label htmlFor="about">
-              <span>05</span> What would make a good first conversation?
-            </label>
-            <textarea
-              id="about"
-              rows={4}
-              maxLength={280}
-              placeholder="A small detail your match could ask you about..."
-              value={p.about}
-              onChange={(e) => update("about", e.target.value)}
-              aria-describedby="about-help about-error"
-            />
-            <p id="about-help" className="field-help">
-              Keep it light. This appears only on your private match card.
-            </p>
-            {err("about")}
-          </div>
           <fieldset
             className="form-question"
-            id="socialStyle"
+            id="looking"
             tabIndex={-1}
-            aria-describedby="socialStyle-error"
+            aria-describedby="looking-error"
           >
             <legend>
-              <span>06</span> What kind of first hello feels best?
+              <span>02</span> Looking for <span aria-hidden="true">(required)</span>
             </legend>
             <div className="choices">
-              {socialStyles.map((x) => (
+              {(["friends", "dating", "either"] as const).map((x) => (
                 <label key={x}>
                   <input
                     type="radio"
-                    name="socialStyle"
-                    checked={p.socialStyle === x}
-                    onChange={() => update("socialStyle", x)}
+                    name="looking"
+                    checked={p.looking === x}
+                    onChange={() => update("looking", x)}
                   />
                   <span>
-                    {x === "one-on-one"
-                      ? "One-on-one"
-                      : x === "small-groups"
-                        ? "A small group"
+                    {x === "friends"
+                      ? "Friends"
+                      : x === "dating"
+                        ? "Dating"
                         : "Either"}
                   </span>
                 </label>
               ))}
             </div>
-            {err("socialStyle")}
+            {err("looking")}
           </fieldset>
           <fieldset
             className="form-question"
@@ -868,9 +837,9 @@ function ProfileForm() {
             aria-describedby="interests-error"
           >
             <legend>
-              <span>07</span> What do you enjoy?
+              <span>03</span> Interests <span aria-hidden="true">(required)</span>
             </legend>
-            <p className="field-help">Pick as many as you like.</p>
+            <p className="field-help">Choose up to 10.</p>
             <div className="choices">
               {interests.map((x) => (
                 <label key={x}>
@@ -887,68 +856,12 @@ function ProfileForm() {
           </fieldset>
           <fieldset
             className="form-question"
-            id="values"
-            tabIndex={-1}
-            aria-describedby="values-error"
-          >
-            <legend>
-              <span>08</span> What matters to you?
-            </legend>
-            <div className="choices">
-              {values.map((x) => (
-                <label key={x}>
-                  <input
-                    type="checkbox"
-                    checked={p.values.includes(x)}
-                    onChange={() => toggle("values", x)}
-                  />
-                  <span>{x}</span>
-                </label>
-              ))}
-            </div>
-            {err("values")}
-          </fieldset>
-          <fieldset
-            className="form-question"
-            id="looking"
-            tabIndex={-1}
-            aria-describedby="looking-error"
-          >
-            <legend>
-              <span>09</span> What are you looking for?
-            </legend>
-            <div className="choices">
-              {(["friends", "dating", "either"] as const).map((x) => (
-                <label key={x}>
-                  <input
-                    type="radio"
-                    name="looking"
-                    checked={p.looking === x}
-                    onChange={() => update("looking", x)}
-                  />
-                  <span>
-                    {x === "friends"
-                      ? "Friends"
-                      : x === "dating"
-                        ? "Low-stakes dating"
-                        : "Either"}
-                  </span>
-                </label>
-              ))}
-            </div>
-            <p className="field-help">
-              We match you with someone who chose the same answer.
-            </p>
-            {err("looking")}
-          </fieldset>
-          <fieldset
-            className="form-question"
             id="availability"
             tabIndex={-1}
             aria-describedby="availability-error"
           >
             <legend>
-              <span>10</span> When could you say hi?
+              <span>04</span> Availability <span aria-hidden="true">(required)</span>
             </legend>
             <p className="field-help">
               Select the days and times that usually work. These are
@@ -978,54 +891,22 @@ function ProfileForm() {
             {err("availability")}
           </fieldset>
           <div className="form-question">
-            <label htmlFor="instagram">
-              <span>11</span> Where can your match say hi?
+            <label htmlFor="about">
+              <span>05</span> About me <small>(optional)</small>
             </label>
-            <input
-              id="instagram"
-              placeholder="@your_instagram"
-              maxLength={31}
-              value={p.instagram}
-              onChange={(e) => update("instagram", e.target.value)}
-              aria-invalid={!!errors.instagram}
-              aria-describedby="instagram-help instagram-error"
+            <textarea
+              id="about"
+              rows={4}
+              maxLength={280}
+              placeholder="A small detail your match could ask you about..."
+              value={p.about}
+              onChange={(e) => update("about", e.target.value)}
+              aria-describedby="about-help about-error"
             />
-            <p id="instagram-help" className="field-help">
-              Instagram is shared only if you both accept.
+            <p id="about-help" className="field-help">
+              280 characters maximum. A blank bio is okay.
             </p>
-            {err("instagram")}
-          </div>
-          <div className="form-question">
-            <p className="question-label">
-              <span>12</span> Would you also like to share your phone?
-            </p>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={p.sharePhone}
-                onChange={(e) => update("sharePhone", e.target.checked)}
-              />
-              <span>
-                Yes, share my phone after we both accept.{" "}
-                <small>Optional. Off by default.</small>
-              </span>
-            </label>
-            {p.sharePhone && (
-              <>
-                <label htmlFor="phone">Phone number</label>
-                <input
-                  id="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  maxLength={24}
-                  value={p.phone}
-                  onChange={(e) => update("phone", e.target.value)}
-                  aria-invalid={!!errors.phone}
-                  aria-describedby="phone-error"
-                />
-              </>
-            )}
-            {err("phone")}
+            {err("about")}
           </div>
           <ErrorBox message={error} />
           {editing && (
@@ -1134,10 +1015,7 @@ function FindMatches() {
             </div>
             <div>
               <h2>{candidate.name}</h2>
-              <p>
-                {candidate.programCategory} · {candidate.program} · Year{" "}
-                {candidate.year}
-              </p>
+              <p>Looking for {candidate.looking}</p>
             </div>
           </div>
           <p className="candidate-intro">
@@ -1153,18 +1031,8 @@ function FindMatches() {
             <summary>Open profile details</summary>
             <div className="candidate-detail-grid">
               <div>
-                <strong>Values</strong>
-                <p>{candidate.values.join(" · ")}</p>
-              </div>
-              <div>
-                <strong>First hello</strong>
-                <p>
-                  {candidate.socialStyle === "one-on-one"
-                    ? "One-on-one"
-                    : candidate.socialStyle === "small-groups"
-                      ? "A small group"
-                      : "Either"}
-                </p>
+                  <strong>Usually free</strong>
+                  <p>{candidate.availability.join(" · ")}</p>
               </div>
               <div>
                 <strong>Looking for</strong>
@@ -1294,10 +1162,7 @@ function Matches() {
             </div>
             <div>
               <h2>{m.cards[other].name}</h2>
-              <p>
-                {m.cards[other].programCategory} · {m.cards[other].program} ·
-                Year {m.cards[other].year}
-              </p>
+              <p>Looking for {m.cards[other].looking}</p>
             </div>
           </div>
           <p className="candidate-intro">
@@ -1308,9 +1173,6 @@ function Matches() {
             {m.sharedInterests.map((x) => (
               <span key={x}>{x}</span>
             ))}
-            {m.sharedProgram && (
-              <span>{m.cards[other].programCategory} studies</span>
-            )}
           </div>
           <details className="candidate-details">
             <summary>See more about {m.cards[other].name}</summary>
@@ -1318,20 +1180,6 @@ function Matches() {
               <div>
                 <strong>They enjoy</strong>
                 <p>{m.cards[other].interests.join(" · ")}</p>
-              </div>
-              <div>
-                <strong>They value</strong>
-                <p>{m.cards[other].values.join(" · ")}</p>
-              </div>
-              <div>
-                <strong>First hello</strong>
-                <p>
-                  {m.cards[other].socialStyle === "one-on-one"
-                    ? "One-on-one"
-                    : m.cards[other].socialStyle === "small-groups"
-                      ? "A small group"
-                      : "Either"}
-                </p>
               </div>
               <div>
                 <strong>Usually free</strong>
@@ -1495,16 +1343,23 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
               .map((c, i) => (
                 <article className="panel" key={i}>
                   <h2>{c.name}</h2>
-                  <p>
-                    Instagram:{" "}
-                    <a
-                      target="_blank"
-                      rel="noreferrer"
-                      href={`https://www.instagram.com/${encodeURIComponent(c.instagram.replace(/^@/, ""))}/`}
-                    >
-                      @{c.instagram.replace(/^@/, "")}
-                    </a>
-                  </p>
+                  {c.instagram ? (
+                    <p>
+                      Instagram:{" "}
+                      <a
+                        target="_blank"
+                        rel="noreferrer"
+                        href={`https://www.instagram.com/${encodeURIComponent(c.instagram.replace(/^@/, ""))}/`}
+                      >
+                        @{c.instagram.replace(/^@/, "")}
+                      </a>
+                    </p>
+                  ) : (
+                    <p>
+                      Instagram was not shared. Keep contact sharing separate
+                      and only after mutual consent.
+                    </p>
+                  )}
                   {c.phone && (
                     <p>
                       Phone:{" "}
@@ -1546,9 +1401,7 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
         </div>
         <div>
           <h2>{card.name}</h2>
-          <p>
-            {card.program} · Year {card.year} · Looking for {card.looking}
-          </p>
+          <p>Looking for {card.looking}</p>
         </div>
       </div>
       <div className="match-layout">
@@ -1574,7 +1427,6 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
             </p>
             <h3>From their answers</h3>
             <p>Interests: {card.interests.join(", ")}.</p>
-            <p>Values: {card.values.join(", ")}.</p>
           </article>
           <article className="panel">
             <h2>A few ways to say hi</h2>
@@ -1676,11 +1528,11 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
 const faqs = [
   [
     "Who sees my answers?",
-    "Only you and the parts shown to your assigned match. Your match sees your first name, program, year, interests, values, connection preference and shared availability. Nobody can browse profiles. Team administrators can access records to operate the project.",
+    "In the demo, saved answers are stored only in this browser and can appear on the card shown to your assigned fictional match. Contact sharing is a separate step only after mutual acceptance. This demo cannot enforce real browsing or identity rules.",
   ],
   [
     "Why a McGill email?",
-    "We verify an @mail.mcgill.ca email to keep this project focused on the McGill community. Email verification is not an identity or background check.",
+    "Join checks that the address format is exactly @mail.mcgill.ca. It does not verify ownership, send email, or establish identity.",
   ],
   [
     "How does matching work?",
@@ -1696,7 +1548,7 @@ const faqs = [
   ],
   [
     "How do I delete my data?",
-    "Use Contact & report a problem to request deletion. The team will confirm your account and handle the request.",
+    "In demo mode, clear this site's browser storage to remove its local profile, decisions and reports. For a real-account request, use Contact & report a problem; no automated deletion is available.",
   ],
   [
     "How do I report someone?",
@@ -1704,7 +1556,7 @@ const faqs = [
   ],
   [
     "When will I get a match?",
-    "The team runs matching in batches. A match is not guaranteed. Check My matches; we’ll email you once real notification sending is configured.",
+    "Demo matching is simulated locally against fictional students. A match is not guaranteed. Check My matches; this demo sends no emails or notifications.",
   ],
 ];
 function Questions() {
@@ -1795,15 +1647,15 @@ function Legal({ terms }: { terms: boolean }) {
         <>
           <h2>A respectful place to meet</h2>
           <p>
-            Use your own McGill email and provide accurate answers. Be
-            respectful. Do not harass, impersonate, discriminate, share another
-            person’s details or misuse the service.
+            Use a fictional @mail.mcgill.ca-format address and fictional answers
+            in this class demo. Be respectful. Do not harass, impersonate,
+            discriminate, share another person’s details or misuse the service.
           </p>
           <h2>Your choices</h2>
           <p>
-            You can accept or pass. A match is not guaranteed. Email
-            verification does not establish identity or guarantee safety.
-            Meeting is always your choice.
+            You can accept or pass. A match is not guaranteed. The address check
+            does not establish identity or guarantee safety. Meeting is always
+            your choice.
           </p>
           <h2>Student project</h2>
           <p>
@@ -1816,33 +1668,33 @@ function Legal({ terms }: { terms: boolean }) {
         <>
           <h2>What we collect</h2>
           <p>
-            Your McGill email, consent record, questionnaire answers, Instagram,
-            optional phone, match decisions and support reports. We count
-            sign-ups, completed profiles, and accept/pass actions in our own
-            records.
+            In demo mode, the browser stores the email-format input, required
+            policy consent, optional reminder preference, short profile answers,
+            fictional match decisions and reports. Instagram and phone are not
+            collected in the short onboarding form.
           </p>
           <h2>Who sees what</h2>
           <p>
-            You see your own answers. Your assigned match sees only the fields
-            on their match card. Contact details become available only after
-            both people accept. Phone is optional and off by default. Nobody can
-            browse profiles. Team administrators can access records to operate
-            the project and respond to reports.
+            The browser-local demo has no real-account visibility controls.
+            Your answers can appear on the card shown to your assigned fictional
+            match: first name, looking-for choice, interests, availability and
+            optional bio. Instagram is intended to be asked only after mutual
+            acceptance; the demo does not collect or share phone numbers.
           </p>
           <h2>Where data is kept</h2>
           <p>
-            Real accounts use Firebase Authentication and Firestore. Hosting
-            uses Vercel. Demo mode stores fictional data only in this browser.
-            The team should confirm data location, retention, consent wording,
-            incident handling, and the privacy contact before inviting real
-            students.
+            The demo stores fictional data in this browser’s local storage.
+            It sends no emails and records no external analytics. Real Firebase
+            accounts and Firestore storage are not configured unless the team
+            adds and verifies separate environment settings.
           </p>
           <h2>Your data choices</h2>
           <p>
-            Contact the team to request access, correction, or deletion. The
-            team handles requests manually and confirms completion. Only
-            essential sign-in storage is used; no advertising trackers are
-            included.
+            In demo mode, clear this site's browser storage to remove the local
+            demo profile and decisions. The site has no automated account
+            deletion control. For a real-account request, use the course
+            workspace or Contact & report a problem; no Dec 31 deletion is
+            currently documented because no confirmed retention policy is active.
           </p>
         </>
       )}
@@ -1899,8 +1751,9 @@ function ContactPage() {
         </Note>
       )}
       <p>
-        For profile changes or data deletion, contact the team. Please avoid
-        sending unnecessary sensitive details.
+        For profile changes or a deletion request, use the established course
+        workspace channel. Please avoid sending unnecessary sensitive details.
+        Demo reports are stored only in this browser and are not sent.
       </p>
       {sent ? (
         <div className="panel" role="status">

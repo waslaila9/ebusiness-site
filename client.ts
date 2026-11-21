@@ -8,6 +8,7 @@ import {
   Contact,
   blankProfile,
   bothAccepted,
+  validateProfile,
 } from "./model";
 import { fakeStudents } from "./fake";
 import { pairProfiles, score } from "./matching";
@@ -113,6 +114,10 @@ export function resetDemoCandidates() {
 }
 export async function saveProfile(p: Profile) {
   if (!demo) return request("profile", p);
+  const errors = validateProfile(p);
+  if (Object.keys(errors).length) {
+    throw new Error(Object.values(errors)[0]);
+  }
   const s = local();
   const existing = s.profiles.find((x) => x.uid === p.uid);
   if (existing) {

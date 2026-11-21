@@ -16,6 +16,6 @@ npm run dev
 
 **Firebase comes next:** follow README.md when you're ready for real shared accounts and data. Do not upload credentials or `.env.local` to GitHub.
 
-For a quick demo: Join → valid McGill-formatted email + draft agreement → Simulate verified sign-in → fill profile → My matches → Accept → Demo: simulate their acceptance → You both said yes.
+For a quick demo: Join → valid McGill-formatted email + required agreement → My profile → save name, looking-for, interests and availability → My matches → Accept → Demo: simulate their acceptance → You both said yes.
 
 Demo mode uses fictional students and sends no emails. Real Firebase integration still needs your team's credentials and testing. Firebase Spark currently limits email-link sign-in emails to 5/day, including resends. Safety, legal, and venue copy should be reviewed before real use.

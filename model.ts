@@ -41,7 +41,7 @@ export const programCategories = [
   "Other",
 ] as const;
 export const socialStyles = ["one-on-one", "small-groups", "either"] as const;
-export type Looking = "friends" | "dating" | "either";
+export type Looking = "" | "friends" | "dating" | "either";
 export type Profile = {
   uid: string;
   name: string;
@@ -63,13 +63,9 @@ export type Profile = {
 export type Card = Pick<
   Profile,
   | "name"
-  | "programCategory"
-  | "program"
-  | "year"
   | "about"
-  | "socialStyle"
   | "interests"
-  | "values"
+  | "availability"
   | "looking"
 >;
 export type Match = {
@@ -94,7 +90,7 @@ export const blankProfile = (uid: string): Profile => ({
   socialStyle: "either",
   interests: [],
   values: [],
-  looking: "friends",
+  looking: "",
   availability: [],
   instagram: "",
   sharePhone: false,
@@ -114,20 +110,8 @@ export function validateProfile(p: Profile) {
   const e: Record<string, string> = {};
   if (!p.name.trim() || p.name.length > 60)
     e.name = "Add your first name (up to 60 characters).";
-  if (
-    !programCategories.includes(
-      p.programCategory as (typeof programCategories)[number],
-    )
-  )
-    e.programCategory = "Choose a broad area of study.";
-  if (!p.program.trim() || p.program.length > 100)
-    e.program = "Add your program (up to 100 characters).";
   if (p.about.length > 280)
     e.about = "Keep your introduction under 280 characters.";
-  if (!socialStyles.includes(p.socialStyle))
-    e.socialStyle = "Choose the kind of connection that feels comfortable.";
-  if (!["1", "2", "3", "4", "5+", "Graduate"].includes(p.year))
-    e.year = "Choose your year.";
   if (
     !Array.isArray(p.interests) ||
     !p.interests.length ||
@@ -137,13 +121,6 @@ export function validateProfile(p: Profile) {
     )
   )
     e.interests = "Choose at least one interest.";
-  if (
-    !Array.isArray(p.values) ||
-    !p.values.length ||
-    p.values.length > 6 ||
-    p.values.some((x) => !values.includes(x as (typeof values)[number]))
-  )
-    e.values = "Choose at least one value.";
   if (!["friends", "dating", "either"].includes(p.looking))
     e.looking = "Choose what you are looking for.";
   const slots = days.flatMap((d) => times.map((t) => `${d} ${t}`));
@@ -154,26 +131,13 @@ export function validateProfile(p: Profile) {
     p.availability.some((x) => !slots.includes(x))
   )
     e.availability = "Choose at least one time that works for you.";
-  if (!/^@?[a-zA-Z0-9._]{1,30}$/.test(p.instagram))
-    e.instagram =
-      "Add an Instagram username (letters, numbers, dots or underscores).";
-  if (
-    typeof p.sharePhone !== "boolean" ||
-    typeof p.phone !== "string" ||
-    (p.sharePhone && !/^\+?[0-9 ()-]{7,24}$/.test(p.phone))
-  )
-    e.phone = "Add a valid phone number or turn off phone sharing.";
   return e;
 }
 export const cardOf = (p: Profile): Card => ({
   name: p.name,
-  programCategory: p.programCategory,
-  program: p.program,
-  year: p.year,
   about: p.about,
-  socialStyle: p.socialStyle,
   interests: p.interests,
-  values: p.values,
+  availability: p.availability,
   looking: p.looking,
 });
 export const contactOf = (p: Profile): Contact => ({

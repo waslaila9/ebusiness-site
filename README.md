@@ -31,9 +31,9 @@ Use Vercel for this project rather than GitHub Pages: it needs Next.js server ro
 
 ## Demo walkthrough
 
-- Join with any syntactically valid `@mail.mcgill.ca` address and check the draft agreement box. No email is sent.
-- Click **Continue in demo mode**, then **Simulate verified sign-in**.
-- Complete the nine-question profile. Instagram can be a fictional handle.
+- Join with an `@mail.mcgill.ca` address and check the required agreement. No email is sent.
+- Click **Continue in demo mode** to enter My profile directly.
+- Complete the first name, looking-for, interests, and availability fields; add an optional bio.
 - Matching runs locally against a small simulated batch of three compatible fictional students drawn from twelve fixtures. This keeps the one-person demo useful; the real batch runner considers all eligible profiles.
 - Open My matches, read the real shared interests/availability and accept.
 - Contact details are still hidden. Click **Demo: simulate their acceptance**, then **You both said yes** to see the fictional contact swap.

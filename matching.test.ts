@@ -100,3 +100,29 @@ test("validation rejects empty fields and unrecognized availability", () => {
       .availability,
   );
 });
+test("short profile allows blank bio and rejects missing required answers", () => {
+  const p = fakeStudents()[0];
+  assert.deepEqual(validateProfile({ ...p, about: "" }), {});
+  assert.ok(validateProfile({ ...p, name: "" }).name);
+  assert.ok(validateProfile({ ...p, looking: "" }).looking);
+  assert.ok(validateProfile({ ...p, interests: [] }).interests);
+  assert.ok(validateProfile({ ...p, availability: [] }).availability);
+  assert.ok(
+    validateProfile({
+      ...p,
+      interests: [
+        "One",
+        "Two",
+        "Three",
+        "Four",
+        "Five",
+        "Six",
+        "Seven",
+        "Eight",
+        "Nine",
+        "Ten",
+        "Eleven",
+      ],
+    } as unknown as Profile).interests,
+  );
+});

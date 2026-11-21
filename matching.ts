@@ -1,17 +1,6 @@
 import { Profile, Match, cardOf } from "./model";
-const words = (value: string) =>
-  new Set(
-    value
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter((word) => word.length > 2),
-  );
-export function programMatches(a: Profile, b: Profile) {
-  if (a.programCategory === b.programCategory && a.programCategory !== "Other")
-    return true;
-  const aWords = words(a.program),
-    bWords = words(b.program);
-  return [...aWords].some((word) => bWords.has(word));
+export function programMatches(_a: Profile, _b: Profile) {
+  return false;
 }
 export function reasons(a: Profile, b: Profile) {
   return {
