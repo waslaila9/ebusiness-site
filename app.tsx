@@ -103,8 +103,9 @@ function Home() {
             <br />A little closer.
           </h1>
           <p className="hero-description">
-            Meet someone who gets you. A friend, a low-key date, or just a
-            familiar face on campus.
+            Find a suggested person who shares your interests or has time
+            when you do. Make a low-pressure start—for friendship, or for
+            dating if that is what you are looking for.
           </p>
           <div className="actions">
             <Link href={user ? "/matches" : "/join"} className="button">
@@ -115,7 +116,8 @@ function Home() {
             </Link>
           </div>
           <p className="micro">
-            Your McGill email. A few questions. One thoughtful match.
+            A McGill email address-format check. A few fictional demo
+            questions. No verification emails sent.
           </p>
         </div>
         <div
@@ -160,9 +162,9 @@ function Home() {
         </div>
       </section>
       <div className="promise-bar">
-        <span>McGill email verified</span>
+        <span>@mail.mcgill.ca format checked</span>
         <span>Compatibility comes first</span>
-        <span>Your answers stay private</span>
+        <span>Fictional, browser-local demo</span>
       </div>
       <section id="how-it-works" className="wrap how-section">
         <div className="section-heading">
@@ -181,8 +183,8 @@ function Home() {
           {[
             [
               "01",
-              "Join with your McGill email",
-              "A shared campus. A little more peace of mind. Verify your email to get started.",
+              "Join with a student email",
+              "Use an @mail.mcgill.ca address. This demo checks the format only; it does not send or verify email.",
             ],
             [
               "02",

@@ -1,17 +1,27 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, ReactNode } from "react";
+import { useEffect, useState, ReactNode } from "react";
 import { useSession } from "./session";
 import { demo, incomplete } from "./firebase";
 export function Shell({ children }: { children: ReactNode }) {
   const { user, logout } = useSession(),
     path = usePathname(),
     [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        document.getElementById("menu-toggle")?.focus();
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open]);
   const nav = user
     ? [
         ["My matches", "/matches"],
-        ["Find more", "/find"],
         ["My profile", "/profile"],
         ["Staying safe", "/staying-safe"],
         ["Questions", "/questions"],
@@ -53,9 +63,12 @@ export function Shell({ children }: { children: ReactNode }) {
             </span>
           </Link>
           <button
+            id="menu-toggle"
             className="menu-btn secondary"
+            type="button"
             aria-expanded={open}
             aria-controls="global-nav"
+            aria-label={open ? "Close navigation menu" : "Open navigation menu"}
             onClick={() => setOpen(!open)}
           >
             {open ? "Close menu" : "Menu"}
@@ -105,13 +118,13 @@ export function Shell({ children }: { children: ReactNode }) {
               href="/privacy"
               aria-current={path === "/privacy" ? "page" : undefined}
             >
-              Privacy policy
+              Privacy
             </Link>
             <Link
               href="/terms"
               aria-current={path === "/terms" ? "page" : undefined}
             >
-              Terms of use
+              Terms
             </Link>
             <Link
               href="/contact"
