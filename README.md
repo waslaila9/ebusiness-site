@@ -34,13 +34,14 @@ Use Vercel for this project rather than GitHub Pages: it needs Next.js server ro
 - Join with an `@mail.mcgill.ca` address and check the required agreement. No email is sent.
 - Click **Continue in demo mode** to enter My profile directly.
 - Complete the first name, looking-for, interests, and availability fields; add an optional bio.
-- Matching runs locally against a small simulated batch of three compatible fictional students drawn from twelve fixtures. This keeps the one-person demo useful; the real batch runner considers all eligible profiles.
-- Open My matches, read the real shared interests/availability and accept.
-- Contact details are still hidden. Click **Demo: simulate their acceptance**, then **You both said yes** to see the fictional contact swap.
-- A pass closes the match; there is no rematch flow.
+- Open My matches. Casey is the first compatible fixture; Taylor is a second, equally compatible fixture without a shared Instagram handle. Only one suggestion is shown at a time.
+- To verify Pass, choose **No, pass** on Casey, then refresh. Casey remains excluded and Taylor is shown.
+- Choose **Show compatible suggestion** to reset the demo match flow. Choose **Yes, connect** on Casey. The match shows your saved yes as **Pending**; refresh and confirm there is no Instagram form or handle reveal.
+- Choose **Demo: simulate Casey's second yes**. The card changes to **Mutual yes**; **Continue to Instagram** opens the match-specific sharing step. Enter a fictional handle such as `demo_ayden`; Casey's fixture handle is `fake_casey`.
+- To verify a missing partner handle, return to My matches, choose **Show compatible suggestion**, pass Casey, say yes to Taylor, then simulate Taylor's second yes. The Instagram step honestly says Taylor has not shared a handle.
+- Demo decisions and match-scoped handles persist in this browser. Clear this site's browser storage to repeat from scratch. Different browsers have independent demos.
 - Browser console logs the demo “You have a match” email. Demo reports and O1/O2/O3 events remain in browser storage.
-- To repeat from scratch, clear this site's browser storage. Different browsers have independent demos.
-- This mode is a simulation, not identity verification or secure multi-user storage. Use only fictional answers and contacts in it.
+- This mode is a simulation, not identity verification or secure multi-user storage. Use only fictional answers and handles in it.
 
 ## Connect real Firebase data and email sign-in
 
@@ -92,18 +93,17 @@ Firebase replaces the original Supabase choice, so `firestore.rules` plus the se
 | Collection/path | Contents | Who can read |
 | --- | --- | --- |
 | accounts/{uid} | email and versioned consent | server/team only |
-| profiles/{uid} | full private questionnaire/contact fields/current-match pointer | that member only; no collection listing |
-| matches/{id} | participants, curated answer snapshots, actual reasons and decisions | participants only; no collection listing |
-| matches/{id}/contacts/{uid} | Instagram and opted-in phone snapshot | either participant only after **both** accept |
-| events/{id} | O1 sign-up, O2 completed profile, O3 accept/pass | server/team only |
+| profiles/{uid} | private questionnaire answers and current-match pointer; no contact handles | that member only; no collection listing |
+| matches/{id} | participants, curated answer snapshots, actual reasons, separate decisions and match-scoped Instagram handles | participants only; no collection listing |
+| events/{id} | O1 sign-up, O2 completed profile, O3 accept/pass and one mutual-accept transition | server/team only |
 | reports/{uid} | latest report by that member | server/team only |
 | mailJobs/{match_uid} | pending notification job | server/team only |
 
 All client writes are denied. Next.js POST routes verify a Firebase ID token with revocation checking, require verified McGill email plus consent registration, validate fields and use Admin SDK transactions. Admin SDK bypasses Firestore rules, so server authorization is independently enforced. A browser cannot set another person's decision or make their own match. No endpoint returns the full profiles collection.
 
-Profile submission is create-only, matching the requested no-edit-settings scope. Edits/deletion are requests to the team. One current match per person remains reserved even after a pass; no automatic rematching. Contacts are never included in match cards, and an unshared phone is not persisted on profile submission.
+Instagram is not part of the profile questionnaire. A participant can enter or update their match-specific handle only after both decisions are yes; no phone numbers are collected or shared. The demo stores decisions and handles in this browser's local storage.
 
-O1/O2/O3 use deterministic IDs and transaction writes to prevent ordinary retries from double-counting. They are linked to member IDs, not anonymous analytics. Review retention for them along with the other records.
+O1/O2/O3 use deterministic IDs and transaction writes to prevent ordinary retries from double-counting. The second yes creates a per-match `mutual_accept` event. Events are linked to member IDs, not anonymous analytics. Review retention for them along with the other records.
 
 ## Run matching by hand (no admin UI)
 
@@ -114,7 +114,7 @@ npm run match
 npm run notify
 ```
 
-The matcher scores identical connection preferences by shared-interest count plus overlapping-time-slot count. Each person chooses the highest score; UID ordering breaks ties deterministically. Mutual best pairs are removed and the next round is computed. Scores, reasons, curated cards, phone-opt-in-filtered contacts, profile pointers and email jobs are saved atomically. Re-running skips paired users. There is a 200-profile class-project batch bound.
+The matcher scores compatible connection preferences by shared-interest count plus overlapping-time-slot count. Each person chooses the highest score; UID ordering breaks ties deterministically. Mutual best pairs are removed and the next round is computed. Scores, reasons, curated cards, profile pointers and email jobs are saved atomically. Re-running skips paired users. There is a 200-profile class-project batch bound.
 
 ### Optional isolated test seed
 
@@ -142,7 +142,7 @@ Body: A little common ground is waiting. See why you matched, choose an easy fir
 
 Add your support email before real use. Signed-in reports are stored for the team in Firestore; the form does not send a support email. A new report replaces the previous open report from that same account, keeping the write path bounded. Support staff must monitor reports and the email inbox manually.
 
-When fulfilling a deletion request, verify the requester, remove their account/profile/consent, relevant contacts and match-card snapshots, linked analytics/reports/mail jobs, and their Firebase Auth user. Review effects on the other participant's match and applicable retention before doing this. There is no automated deletion promise or rematch flow.
+When fulfilling a deletion request, verify the requester, remove their account/profile/consent, match-scoped handles and match-card snapshots, any legacy contact snapshots, linked analytics/reports/mail jobs, and their Firebase Auth user. Review effects on the other participant's match and applicable retention before doing this. There is no automated deletion promise or rematch flow.
 
 ## Routes
 
@@ -236,14 +236,14 @@ npm test
 npm run build
 ```
 
-Seven focused tests cover email restrictions, return-path validation, explainable scores, mutual pairing, exclusion of paired/incomplete profiles, contact opt-in and mutual acceptance, and profile validation. The initial production build passed. A browser preview rendered, but interactive QA was blocked by this execution environment's development-server `uv_resident_set_memory` error. These checks do **not** constitute live Firebase integration testing or an executed Firestore rules emulator suite.
+Focused tests cover email restrictions, return-path validation, explainable scores, mutual pairing, exclusion of paired/incomplete profiles, pending/pass/mutual decisions, pass persistence, one-time mutual events, match-scoped Instagram sharing and profile validation. These checks do **not** constitute live Firebase integration testing or an executed Firestore rules emulator suite.
 
 Before inviting real students, test with two verified test accounts and a third unrelated account:
 
 1. A user can get their own profile but cannot get/list other profiles.
 2. A participant can get their assigned match card, while an outsider and signed-out client cannot.
-3. The contacts document is denied with zero or one acceptance, allowed after two acceptances, and denied after any pass. Navigate directly to the connected URL too.
-4. Raw browser writes to profiles, matches, contacts, events, accounts and reports fail; a forged uid/decision fails through the HTTP API.
+3. Match-scoped Instagram updates are denied with zero or one acceptance and after any pass; they are allowed only after two acceptances. Legacy contacts subcollection reads are denied. Navigate directly to the connected URL too.
+4. Raw browser writes to profiles, matches, events, accounts and reports fail; a forged uid/decision fails through the HTTP API.
 5. Non-McGill and unverified tokens fail API requests and Firestore reads.
 6. Try non-McGill input, empty fields, expired links, network failures, no-match state and unknown URLs. Drafts should survive failed sends.
 7. At 360px, test menu, keyboard focus, accordion, form controls and availability grid. Review text contrast and screen-reader labels.

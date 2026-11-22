@@ -5,36 +5,75 @@ import {
   Profile,
   Match,
   User,
-  Contact,
   blankProfile,
   bothAccepted,
   validateProfile,
 } from "./model";
-import { compatibleDemoStudent, fakeStudents } from "./fake";
-import { rankCandidates, reasons, lookingMatches } from "./matching";
+import {
+  compatibleDemoStudent,
+  demoInstagramFor,
+  fakeStudents,
+  noHandleDemoStudent,
+} from "./fake";
+import {
+  applyMatchDecision,
+  rankCandidates,
+  reasons,
+  lookingMatches,
+} from "./matching";
 const key = "mcgill-matched-demo-v1";
 export type DemoScenario = "compatible" | "waiting" | "no-eligible";
 type State = {
   user: User | null;
   profiles: Profile[];
   matches: Match[];
-  events: { type: string; at: number }[];
+  events: {
+    type: string;
+    at: number;
+    matchId?: string;
+    candidateUid?: string;
+  }[];
   reports: string[];
   candidateDecisions: Record<string, "accept" | "pass">;
   demoScenario?: DemoScenario;
 };
+function savedProfile(profile: Profile): Profile {
+  const clean = {
+    ...profile,
+  } as Profile & {
+    instagram?: string;
+    phone?: string;
+    sharePhone?: boolean;
+    email?: string;
+  };
+  delete clean.instagram;
+  delete clean.phone;
+  delete clean.sharePhone;
+  delete clean.email;
+  return { ...blankProfile(profile.uid), ...clean };
+}
+function savedMatch(match: Match): Match {
+  const clean = { ...match };
+  if (!clean.decisions || !bothAccepted(clean)) delete clean.instagram;
+  return clean;
+}
+const candidateDecisionKey = (uid: string, candidateUid: string) =>
+  `${uid}:${candidateUid}`;
 export function local(): State {
   const raw = localStorage.getItem(key);
   if (raw) {
     const state = JSON.parse(raw) as Partial<State>;
-    return {
+    const normalized = {
       ...state,
-      profiles: (state.profiles || []).map((profile) => ({
-        ...blankProfile(profile.uid),
-        ...profile,
-      })),
+      profiles: (state.profiles || []).map(savedProfile),
+      matches: (state.matches || []).map(savedMatch),
+      events: state.events || [],
+      reports: state.reports || [],
       candidateDecisions: state.candidateDecisions || {},
     } as State;
+    const migrated = JSON.stringify(normalized);
+    if (migrated !== raw) localStorage.setItem(key, migrated);
+    return normalized;
   }
   return {
     user: null,
@@ -79,21 +118,29 @@ export async function request(route: string, data: unknown) {
 export async function getProfile(uid: string): Promise<Profile | null> {
   if (demo) return local().profiles.find((p) => p.uid === uid) || null;
   const snap = await getDoc(doc(db!, "profiles", uid));
-  return snap.exists() ? (snap.data() as Profile) : null;
+  return snap.exists() ? savedProfile(snap.data() as Profile) : null;
 }
-export async function getCandidates(uid: string): Promise<Profile[]> {
+export function getCandidates(uid: string): Profile[] {
   if (!demo) return [];
   const s = local();
   const me = s.profiles.find((profile) => profile.uid === uid);
-  if (!me) return [];
+  if (!me || me.currentMatch) return [];
   if (s.demoScenario === "waiting") return [];
   if (s.demoScenario === "no-eligible") return [];
-  const decided = Object.keys(s.candidateDecisions);
+  const decided = Object.entries(s.candidateDecisions)
+    .filter(([key]) =>
+      key.startsWith(`${uid}:`) ||
+      (uid === "demo-you" && !key.includes(":")),
+    )
+    .map(([key]) => key.slice(key.lastIndexOf(":") + 1));
   return rankCandidates(
     me,
     [
       compatibleDemoStudent(me),
-      ...s.profiles.filter((profile) => profile.uid !== "demo-00"),
+      noHandleDemoStudent(me),
+      ...s.profiles.filter(
+        (profile) => !["demo-00", "demo-13"].includes(profile.uid),
+      ),
     ],
     decided,
   );
@@ -102,63 +149,79 @@ export function demoCandidateDecision(
   uid: string,
   candidateUid: string,
   decision: "accept" | "pass",
-) {
-  if (!demo) return;
+): "saved" | "stale" | "already-decided" {
+  if (!demo) return "stale";
   const s = local();
-  s.candidateDecisions[candidateUid] = decision;
+  const me = s.profiles.find((profile) => profile.uid === uid);
+  const decisionKey = candidateDecisionKey(uid, candidateUid);
+  if (
+    !me?.completed ||
+    me.currentMatch ||
+    getCandidates(uid)[0]?.uid !== candidateUid
+  )
+    return "stale";
+  if (
+    s.candidateDecisions[decisionKey] ||
+    (uid === "demo-you" && s.candidateDecisions[candidateUid])
+  )
+    return "already-decided";
+
+  const candidate =
+    candidateUid === "demo-00"
+      ? compatibleDemoStudent(me)
+      : candidateUid === "demo-13"
+        ? noHandleDemoStudent(me)
+      : s.profiles.find((profile) => profile.uid === candidateUid);
+  if (!candidate || !lookingMatches(me, candidate)) return "stale";
+  const members = [uid, candidateUid].sort();
+  const id = `${members[0]}_${members[1]}`;
+  if (decision === "accept" && s.matches.some((item) => item.id === id))
+    return "already-decided";
+
+  s.candidateDecisions[decisionKey] = decision;
   s.events.push({
     type: decision === "accept" ? "candidate-yes" : "candidate-pass",
+    candidateUid,
     at: Date.now(),
   });
   if (decision === "accept") {
-    const me = s.profiles.find((profile) => profile.uid === uid);
-    let candidate = s.profiles.find((profile) => profile.uid === candidateUid);
-    if (candidateUid === "demo-00" && me) {
-      candidate = compatibleDemoStudent(me);
-      const existingIndex = s.profiles.findIndex(
-        (profile) => profile.uid === candidateUid,
-      );
-      if (existingIndex < 0) s.profiles.push(candidate);
-      else s.profiles[existingIndex] = candidate;
-    }
-    if (me && candidate && lookingMatches(me, candidate)) {
-      const members = [uid, candidateUid].sort();
-      const id = `${members[0]}_${members[1]}`;
-      let match = s.matches.find((item) => item.id === id);
-      if (!match) {
-        match = {
-          id,
-          members,
-          cards: {
-            [me.uid]: {
-              name: me.name,
-              about: me.about,
-              interests: me.interests,
-              availability: me.availability,
-              looking: me.looking,
-            },
-            [candidate.uid]: {
-              name: candidate.name,
-              about: candidate.about,
-              interests: candidate.interests,
-              availability: candidate.availability,
-              looking: candidate.looking,
-            },
-          },
-          decisions: {
-            [me.uid]: "accept",
-            [candidate.uid]: "pending",
-          },
-          ...reasons(me, candidate),
-          createdAt: Date.now(),
-        };
-        s.matches.push(match);
-        me.currentMatch = id;
-        candidate.currentMatch = id;
-      }
-    }
+    const existingIndex = s.profiles.findIndex(
+      (profile) => profile.uid === candidateUid,
+    );
+    if (existingIndex < 0) s.profiles.push(candidate);
+    else s.profiles[existingIndex] = candidate;
+    const match: Match = {
+      id,
+      members,
+      cards: {
+        [me.uid]: {
+          name: me.name,
+          about: me.about,
+          interests: me.interests,
+          availability: me.availability,
+          looking: me.looking,
+        },
+        [candidate.uid]: {
+          name: candidate.name,
+          about: candidate.about,
+          interests: candidate.interests,
+          availability: candidate.availability,
+          looking: candidate.looking,
+        },
+      },
+      decisions: {
+        [me.uid]: "accept",
+        [candidate.uid]: "pending",
+      },
+      ...reasons(me, candidate),
+      createdAt: Date.now(),
+    };
+    s.matches.push(match);
+    me.currentMatch = id;
+    candidate.currentMatch = id;
   }
   write(s);
+  return "saved";
 }
 export function resetDemoCandidates() {
   if (!demo) return;
@@ -182,17 +245,17 @@ export function setDemoScenario(scenario: DemoScenario) {
   write(s);
 }
 export async function saveProfile(p: Profile) {
-  if (!demo) return request("profile", p);
+  if (!demo) return request("profile", savedProfile(p));
   const errors = validateProfile(p);
   if (Object.keys(errors).length) {
     throw new Error(Object.values(errors)[0]);
   }
   const s = local();
+  const cleanProfile = savedProfile(p);
   const existing = s.profiles.find((x) => x.uid === p.uid);
   if (existing) {
     Object.assign(existing, {
-      ...p,
-      phone: p.sharePhone ? p.phone : "",
+      ...cleanProfile,
       completed: true,
       currentMatch: existing.currentMatch,
     });
@@ -201,8 +264,7 @@ export async function saveProfile(p: Profile) {
     return;
   }
   s.profiles.push({
-    ...p,
-    phone: p.sharePhone ? p.phone : "",
+    ...cleanProfile,
     completed: true,
   });
   s.events.push({ type: "O2", at: Date.now() });
@@ -226,43 +288,69 @@ export async function decide(
   const s = local();
   const m = s.matches.find((x) => x.id === id && x.members.includes(uid));
   if (!m) throw new Error("Match not found.");
-  if (m.decisions[uid] !== "pending") throw new Error("You already decided.");
-  m.decisions[uid] = decision;
+  const wasMutual = bothAccepted(m);
+  const result = applyMatchDecision(m, uid, decision);
+  if (result !== "saved")
+    throw new Error(
+      result === "closed"
+        ? "This match is already closed."
+        : "You already decided.",
+    );
   s.events.push({ type: "O3", at: Date.now() });
-  if (bothAccepted(m) && !s.events.some((event) => event.type === "mutual_accept")) {
-    s.events.push({ type: "mutual_accept", at: Date.now() });
-  }
+  if (
+    !wasMutual &&
+    bothAccepted(m) &&
+    !s.events.some(
+      (event) => event.type === "mutual_accept" && event.matchId === m.id,
+    )
+  )
+    s.events.push({ type: "mutual_accept", matchId: m.id, at: Date.now() });
+  write(s);
+  return;
+}
+export async function saveMatchInstagram(
+  id: string,
+  uid: string,
+  input: string,
+) {
+  const instagram = input.trim().replace(/^@/, "");
+  if (instagram && !/^[A-Za-z0-9._]{1,30}$/.test(instagram))
+    throw new Error("Enter a valid Instagram username (letters, numbers, . or _).");
+  if (!demo) return request("instagram", { id, instagram });
+  const s = local();
+  const match = s.matches.find((item) => item.id === id);
+  if (!match || !match.members.includes(uid))
+    throw new Error("Match not found.");
+  if (!bothAccepted(match))
+    throw new Error("Both people need to say yes before sharing Instagram.");
+  match.instagram ||= {};
+  if (instagram) match.instagram[uid] = instagram;
+  else delete match.instagram[uid];
   write(s);
 }
-export async function contacts(m: Match): Promise<Contact[]> {
-  if (!bothAccepted(m)) throw new Error("Both people need to accept first.");
-  if (demo)
-    return local()
-      .profiles.filter((p) => m.members.includes(p.uid))
-      .map((p) => ({
-        name: p.name,
-        instagram: p.instagram,
-        ...(p.sharePhone ? { phone: p.phone } : {}),
-      }));
-  return Promise.all(
-    m.members.map(async (uid) => {
-      const s = await getDoc(doc(db!, "matches", m.id, "contacts", uid));
-      if (!s.exists()) throw new Error("Contact details are unavailable.");
-      return s.data() as Contact;
-    }),
-  );
-}
-export function demoOtherAccept(id: string, uid: string) {
-  const s = local(),
-    m = s.matches.find((x) => x.id === id);
-  if (!m || m.decisions[uid] !== "accept") return;
-  m.members
-    .filter((x) => x !== uid)
-    .forEach((x) => (m.decisions[x] = "accept"));
-  if (bothAccepted(m) && !s.events.some((event) => event.type === "mutual_accept")) {
-    s.events.push({ type: "mutual_accept", at: Date.now() });
+export function demoOtherAccept(id: string, uid: string): boolean {
+  if (!demo) return false;
+  const s = local();
+  const match = s.matches.find((item) => item.id === id);
+  if (!match || match.decisions[uid] !== "accept") return false;
+  const other = match.members.find((member) => member !== uid);
+  if (!other || match.decisions[other] !== "pending") return false;
+  const result = applyMatchDecision(match, other, "accept");
+  if (result !== "saved") return false;
+  const instagram = demoInstagramFor(other);
+  if (instagram) {
+    match.instagram ||= {};
+    match.instagram[other] = instagram;
   }
+  if (
+    bothAccepted(match) &&
+    !s.events.some(
+      (event) => event.type === "mutual_accept" && event.matchId === match.id,
+    )
+  )
+    s.events.push({ type: "mutual_accept", matchId: match.id, at: Date.now() });
   write(s);
+  return true;
 }
 export async function report(message: string) {
   if (!demo) return request("report", { message });

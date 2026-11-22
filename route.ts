@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { admin } from "./admin";
-import { isMcGill, validateProfile, Profile } from "./model";
+import {
+  bothAccepted,
+  isMcGill,
+  Match,
+  validateProfile,
+  Profile,
+} from "./model";
+import { applyMatchDecision } from "./matching";
 export const runtime = "nodejs";
 export async function POST(
   req: NextRequest,
@@ -67,9 +74,6 @@ export async function POST(
         values: Array.isArray(b.values) ? b.values : [],
         looking: b.looking,
         availability: Array.isArray(b.availability) ? b.availability : [],
-        instagram: String(b.instagram || "").replace(/^@/, ""),
-        sharePhone: b.sharePhone === true,
-        phone: b.sharePhone ? String(b.phone || "") : "",
         completed: true,
         currentMatch: old?.currentMatch || null,
       };
@@ -101,13 +105,17 @@ export async function POST(
       await db.runTransaction(async (tx) => {
         const ref = db.doc(`matches/${b.id}`);
         const snap = await tx.get(ref);
-        const m = snap.data();
+        const m = snap.data() as Match | undefined;
         if (!m || !m.members.includes(uid)) throw new Error("Match not found.");
         if (m.decisions[uid] !== "pending") {
           if (m.decisions[uid] === b.decision) return;
           throw new Error("Your decision is already saved.");
         }
-        tx.update(ref, { [`decisions.${uid}`]: b.decision });
+        const wasMutual = bothAccepted(m);
+        const result = applyMatchDecision(m, uid, b.decision);
+        if (result !== "saved")
+          throw new Error("This match is already closed or decided.");
+        tx.update(ref, { [`decisions.${uid}`]: m.decisions[uid] });
         tx.create(db.doc(`events/O3_${b.id}_${uid}`), {
           type: "O3",
           uid,
@@ -115,6 +123,37 @@ export async function POST(
           decision: b.decision,
           at: Date.now(),
         });
+        if (!wasMutual && bothAccepted(m)) {
+          tx.create(db.doc(`events/mutual_accept_${b.id}`), {
+            type: "mutual_accept",
+            matchId: b.id,
+            at: Date.now(),
+          });
+        }
+      });
+      return NextResponse.json({ ok: true });
+    }
+    if (route === "instagram") {
+      if (!/^[\w-]+$/.test(b.id) || typeof b.instagram !== "string")
+        return NextResponse.json(
+          { error: "Enter a valid Instagram username." },
+          { status: 400 },
+        );
+      const instagram = b.instagram.trim().replace(/^@/, "");
+      if (instagram && !/^[A-Za-z0-9._]{1,30}$/.test(instagram))
+        return NextResponse.json(
+          { error: "Enter a valid Instagram username." },
+          { status: 400 },
+        );
+      await db.runTransaction(async (tx) => {
+        const ref = db.doc(`matches/${b.id}`);
+        const snap = await tx.get(ref);
+        const m = snap.data() as Match | undefined;
+        if (!m || !m.members.includes(uid))
+          throw new Error("Match not found.");
+        if (!bothAccepted(m))
+          throw new Error("Both people need to say yes before sharing Instagram.");
+        tx.update(ref, { [`instagram.${uid}`]: instagram });
       });
       return NextResponse.json({ ok: true });
     }

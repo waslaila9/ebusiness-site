@@ -11,7 +11,6 @@ import { auth, demo, incomplete } from "./firebase";
 import {
   Profile,
   Match,
-  Contact,
   blankProfile,
   isMcGill,
   safeNext,
@@ -28,7 +27,7 @@ import {
   saveProfile,
   getMatch,
   decide,
-  contacts,
+  saveMatchInstagram,
   demoOtherAccept,
   demoCandidateDecision,
   resetDemoCandidates,
@@ -1053,9 +1052,14 @@ function FindMatches() {
   const [index, setIndex] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [hasCurrentMatch, setHasCurrentMatch] = useState(false);
   async function load() {
     setError("");
     try {
+      const profile = await getProfile(user!.uid);
+      setHasCurrentMatch(!!profile?.currentMatch);
       setCandidates(await getCandidates(user!.uid));
       setIndex(0);
       setLoaded(true);
@@ -1067,11 +1071,29 @@ function FindMatches() {
     if (user) load();
   }, [user]);
   const candidate = candidates[index];
-  function decideCandidate(decision: "accept" | "pass") {
-    if (!candidate || !user) return;
-    demoCandidateDecision(user.uid, candidate.uid, decision);
-    setIndex((current) => current + 1);
-    load();
+  async function decideCandidate(decision: "accept" | "pass") {
+    if (!candidate || !user || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = demoCandidateDecision(user.uid, candidate.uid, decision);
+      if (result !== "saved")
+        throw new Error(
+          result === "stale"
+            ? "This suggestion is no longer active. Refresh to see the latest one."
+            : "You already decided on this suggestion.",
+        );
+      setNotice(
+        decision === "pass"
+          ? `Passed on ${candidate.name}. Showing your next suggestion.`
+          : `You said yes to ${candidate.name}. Check My matches for their response.`,
+      );
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your choice.");
+    } finally {
+      setBusy(false);
+    }
   }
   return (
     <section className="content-page page">
@@ -1086,6 +1108,7 @@ function FindMatches() {
       <p className="lead">
         Look through one profile at a time. Say yes or pass, then keep going.
       </p>
+      {notice && <p className="decision-notice" role="status">{notice}</p>}
       {error ? (
         <>
           <ErrorBox message={error} />
@@ -1147,15 +1170,17 @@ function FindMatches() {
           <div className="decision-actions">
             <button
               className="button pass-action"
+              disabled={busy}
               onClick={() => decideCandidate("pass")}
             >
-              No, pass
+              {busy ? "Saving…" : "No, pass"}
             </button>
             <button
               className="button yes-action"
+              disabled={busy}
               onClick={() => decideCandidate("accept")}
             >
-              Yes, interested ↗
+              {busy ? "Saving…" : "Yes, interested"} ↗
             </button>
           </div>
           <p className="micro">
@@ -1164,17 +1189,29 @@ function FindMatches() {
         </article>
       ) : (
         <div className="empty-state">
-          <h2>You’ve seen everyone in this demo.</h2>
-          <p>Reset the fictional candidate list and try the flow again.</p>
-          <button
-            className="button"
-            onClick={() => {
-              resetDemoCandidates();
-              load();
-            }}
-          >
-            Start over
-          </button>
+          {hasCurrentMatch ? (
+            <>
+              <h2>Your response is saved.</h2>
+              <p>Open My matches to see whether the other student has replied.</p>
+              <Link className="button" href="/matches">
+                Go to My matches
+              </Link>
+            </>
+          ) : (
+            <>
+              <h2>You’ve seen everyone in this demo.</h2>
+              <p>Reset the fictional candidate list and try the flow again.</p>
+              <button
+                className="button"
+                onClick={() => {
+                  resetDemoCandidates();
+                  load();
+                }}
+              >
+                Start over
+              </button>
+            </>
+          )}
         </div>
       )}
       <Note>
@@ -1192,7 +1229,8 @@ function Matches() {
     [scenario, setScenario] = useState<"compatible" | "waiting" | "no-eligible">("compatible"),
     [loaded, setLoaded] = useState(false),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [notice, setNotice] = useState("");
   async function load() {
     setError("");
     try {
@@ -1219,7 +1257,7 @@ function Matches() {
     if (user) load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [user]);
   async function act(decision: "accept" | "pass") {
-    if (!m || !user) return;
+    if (!m || !user || busy) return;
     setBusy(true);
     setError("");
     try {
@@ -1232,14 +1270,43 @@ function Matches() {
     }
   }
   async function actSuggestion(decision: "accept" | "pass") {
-    if (!suggestion || !user) return;
+    if (!suggestion || !user || busy) return;
     setBusy(true);
     setError("");
     try {
-      demoCandidateDecision(user.uid, suggestion.uid, decision);
+      const result = demoCandidateDecision(
+        user.uid,
+        suggestion.uid,
+        decision,
+      );
+      if (result !== "saved")
+        throw new Error(
+          result === "stale"
+            ? "This suggestion is no longer active. Refresh to see the latest one."
+            : "You already decided on this suggestion.",
+        );
+      setNotice(
+        decision === "pass"
+          ? `Passed on ${suggestion.name}. Showing your next suggestion.`
+          : "",
+      );
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save your choice.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function simulateOtherYes() {
+    if (!m || !user || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (!demoOtherAccept(m.id, user.uid))
+        throw new Error("The other student’s answer is no longer pending.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the demo response.");
     } finally {
       setBusy(false);
     }
@@ -1257,6 +1324,7 @@ function Matches() {
       <p className="eyebrow">ONE THOUGHTFUL INTRODUCTION</p>
       <h1>My matches</h1>
       <p className="lead">A little common ground is a good place to start.</p>
+      {notice && <p className="decision-notice" role="status">{notice}</p>}
       {demo && p?.completed && (
         <div className="demo-scenarios">
           <p className="micro">Demo scenarios</p>
@@ -1268,6 +1336,7 @@ function Matches() {
               aria-pressed={scenario === option}
               onClick={() => {
                 setDemoScenario(option);
+                setNotice("");
                 load();
               }}
             >
@@ -1318,7 +1387,7 @@ function Matches() {
               disabled={busy}
               onClick={() => actSuggestion("pass")}
             >
-              No, pass
+              {busy ? "Saving…" : "No, pass"}
             </button>
             <button
               className="button yes-action"
@@ -1358,25 +1427,36 @@ function Matches() {
           {error && <ErrorBox message={error} />}
           {m.decisions[user!.uid] === "pass" ||
           m.decisions[other] === "pass" ? (
-            <Note>No contact details were shared. This match is closed.</Note>
+            <Note>
+              {m.decisions[user!.uid] === "pass"
+                ? "You passed on this match."
+                : `${m.cards[other].name} passed on this match.`}{" "}
+              It’s closed, and no contact details were shared.
+            </Note>
           ) : bothAccepted(m) ? (
-            <Link className="button full" href={`/matches/${m.id}/connected`}>
-              You both said yes ↗
-            </Link>
+            <>
+              <Note>
+                <strong>Mutual yes:</strong> you both accepted. Instagram
+                sharing is now available for this match.
+              </Note>
+              <Link className="button full" href={`/matches/${m.id}/connected`}>
+                Continue to Instagram ↗
+              </Link>
+            </>
           ) : m.decisions[user!.uid] === "accept" ? (
             <>
               <Note>
-                You said yes. We’re waiting for {m.cards[other].name}.
+                <strong>Pending:</strong> your yes is saved. We’re waiting for{" "}
+                {m.cards[other].name}. Instagram stays unavailable until they
+                also say yes.
               </Note>
               {demo && (
                 <button
                   className="text-btn"
-                  onClick={() => {
-                    demoOtherAccept(m.id, user!.uid);
-                    load();
-                  }}
+                  disabled={busy}
+                  onClick={simulateOtherYes}
                 >
-                  Demo: simulate their acceptance
+                  Demo: simulate {m.cards[other].name}&apos;s second yes
                 </button>
               )}
             </>
@@ -1399,7 +1479,7 @@ function Matches() {
             </div>
           )}
           <p className="micro">
-            Your choice is private. Contact details stay hidden until you both
+            Your choice is private. Instagram stays unavailable until you both
             say yes.
           </p>
         </article>
@@ -1440,7 +1520,8 @@ function Matches() {
 function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
   const { user } = useSession(),
     [m, setM] = useState<Match | null>(null),
-    [info, setInfo] = useState<Contact[]>([]),
+    [instagramInput, setInstagramInput] = useState(""),
+    [instagramSaved, setInstagramSaved] = useState(false),
     [error, setError] = useState(""),
     [loaded, setLoaded] = useState(false),
     [busy, setBusy] = useState(false);
@@ -1449,7 +1530,7 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
     try {
       const x = await getMatch(id, user!.uid);
       setM(x);
-      if (connected && x && bothAccepted(x)) setInfo(await contacts(x));
+      setInstagramInput(x?.instagram?.[user!.uid] || "");
       setLoaded(true);
     } catch {
       setError("Could not load this match. Try again.");
@@ -1459,6 +1540,7 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
     if (user) load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [user, id, connected]);
   async function act(decision: "accept" | "pass") {
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
@@ -1466,6 +1548,36 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function submitInstagram(event: FormEvent) {
+    event.preventDefault();
+    if (!user || !m || !bothAccepted(m) || busy) return;
+    setBusy(true);
+    setError("");
+    setInstagramSaved(false);
+    try {
+      await saveMatchInstagram(m.id, user.uid, instagramInput);
+      setInstagramSaved(true);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your Instagram.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function simulateOtherYes() {
+    if (!user || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (!demoOtherAccept(id, user.uid))
+        throw new Error("The other student’s answer is no longer pending.");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save the demo response.");
     } finally {
       setBusy(false);
     }
@@ -1504,7 +1616,10 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
         <h1>You both said yes</h1>
         {!bothAccepted(m) ? (
           <>
-            <Note>Contact details stay private until you both accept.</Note>
+            <Note>
+              This match is still pending. Instagram stays unavailable until
+              you both say yes.
+            </Note>
             <Link className="button" href={`/matches/${id}`}>
               Return to Your match
             </Link>
@@ -1512,38 +1627,55 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
         ) : (
           <>
             <p className="lead">You and {card.name} have a place to start.</p>
-            {info
-              .filter((_, i) => m.members[i] === other)
-              .map((c, i) => (
-                <article className="panel" key={i}>
-                  <h2>{c.name}</h2>
-                  {c.instagram ? (
-                    <p>
-                      Instagram:{" "}
-                      <a
-                        target="_blank"
-                        rel="noreferrer"
-                        href={`https://www.instagram.com/${encodeURIComponent(c.instagram.replace(/^@/, ""))}/`}
-                      >
-                        @{c.instagram.replace(/^@/, "")}
-                      </a>
-                    </p>
-                  ) : (
-                    <p>
-                      Instagram was not shared. Keep contact sharing separate
-                      and only after mutual consent.
-                    </p>
-                  )}
-                  {c.phone && (
-                    <p>
-                      Phone:{" "}
-                      <a href={`tel:${c.phone.replace(/[^+\d]/g, "")}`}>
-                        {c.phone}
-                      </a>
-                    </p>
-                  )}
-                </article>
-              ))}
+            <article className="panel">
+              <h2>Your Instagram for this match</h2>
+              <p>
+                Share a handle for this match only. You can update or remove it
+                later; it is not part of your profile.
+              </p>
+              <form onSubmit={submitInstagram}>
+                <label htmlFor="match-instagram">Your Instagram username</label>
+                <input
+                  id="match-instagram"
+                  name="instagram"
+                  autoComplete="off"
+                  maxLength={31}
+                  placeholder="@your_handle"
+                  value={instagramInput}
+                  onChange={(event) => {
+                    setInstagramSaved(false);
+                    setInstagramInput(event.target.value);
+                  }}
+                  disabled={busy}
+                />
+                <button className="button" disabled={busy}>
+                  {busy ? "Saving…" : instagramInput ? "Save handle" : "Remove handle"}
+                </button>
+                {instagramSaved && (
+                  <p className="success" role="status">
+                    Your match-specific Instagram handle was saved.
+                  </p>
+                )}
+              </form>
+            </article>
+            <article className="panel">
+              <h2>{card.name}&apos;s Instagram</h2>
+              {m.instagram?.[other] ? (
+                <p>
+                  <a
+                    target="_blank"
+                    rel="noreferrer"
+                    href={`https://www.instagram.com/${encodeURIComponent(m.instagram[other])}/`}
+                  >
+                    @{m.instagram[other]}
+                  </a>
+                </p>
+              ) : (
+                <p>
+                  {card.name} hasn’t shared an Instagram handle for this match.
+                </p>
+              )}
+            </article>
             <ErrorBox message={error} />
             {error && (
               <button className="button" onClick={load}>
@@ -1638,18 +1770,20 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
             ) : mine === "accept" ? (
               <>
                 <Note>You said yes. We’re waiting for {card.name}.</Note>
-                <button className="button secondary full" onClick={load}>
+                <button
+                  className="button secondary full"
+                  disabled={busy}
+                  onClick={load}
+                >
                   Check their response
                 </button>
                 {demo && (
                   <button
                     className="text-btn"
-                    onClick={() => {
-                      demoOtherAccept(id, user!.uid);
-                      load();
-                    }}
+                    disabled={busy}
+                    onClick={simulateOtherYes}
                   >
-                    Demo: simulate their acceptance
+                    Demo: simulate {card.name}&apos;s second yes
                   </button>
                 )}
               </>
@@ -1828,16 +1962,16 @@ function Legal({ terms }: { terms: boolean }) {
           <p>
             In demo mode, the browser stores the email-format input, required
             policy consent, optional reminder preference, short profile answers,
-            fictional match decisions and reports. Instagram and phone are not
-            collected in the short onboarding form.
+            fictional match decisions and reports. Instagram is requested only
+            after a mutual yes and is saved for that match.
           </p>
           <h2>Who sees what</h2>
           <p>
             The browser-local demo has no real-account visibility controls.
             Your answers can appear on the card shown to your assigned fictional
             match: first name, looking-for choice, interests, availability and
-            optional bio. Instagram is intended to be asked only after mutual
-            acceptance; the demo does not collect or share phone numbers.
+            optional bio. Instagram is shared only after mutual acceptance.
+            Phone numbers are not collected or shared.
           </p>
           <h2>Where data is kept</h2>
           <p>

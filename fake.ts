@@ -27,9 +27,6 @@ export function fakeStudents(): Profile[] {
       "Friday Evening",
       ...(i % 2 ? ["Saturday Morning"] : ["Monday Morning"]),
     ],
-    instagram: `fake_student_${i + 1}`,
-    sharePhone: false,
-    phone: "",
     completed: true,
   }));
 }
@@ -42,7 +39,27 @@ export function compatibleDemoStudent(profile: Profile): Profile {
     interests: [...(profile.interests || [])],
     looking: profile.looking,
     availability: [...(profile.availability || [])],
-    instagram: "fake_casey",
     completed: true,
   };
+}
+
+export function noHandleDemoStudent(profile: Profile): Profile {
+  return {
+    ...blankProfile("demo-13"),
+    name: "Taylor",
+    about: "A fictional McGill student with a compatible schedule and interests.",
+    interests: [...(profile.interests || [])],
+    looking: profile.looking,
+    availability: [...(profile.availability || [])],
+    completed: true,
+  };
+}
+
+export function demoInstagramFor(uid: string): string | null {
+  if (uid === "demo-00") return "fake_casey";
+  if (uid === "demo-01" || uid === "demo-13") return null;
+  const number = Number(uid.match(/^demo-(\d+)$/)?.[1]);
+  return Number.isInteger(number) && number >= 2 && number <= 12
+    ? `demo_student_${String(number).padStart(2, "0")}`
+    : null;
 }

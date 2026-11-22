@@ -9,12 +9,6 @@ service cloud.firestore {
   match /profiles/{uid} { allow get: if member() && request.auth.uid == uid; }
   match /matches/{id} {
    allow get: if member() && request.auth.uid in resource.data.members;
-   match /contacts/{uid} {
-    function paired() { return get(/databases/$(database)/documents/matches/$(id)).data; }
-    allow get: if member() && request.auth.uid in paired().members
-     && paired().decisions[paired().members[0]] == 'accept'
-     && paired().decisions[paired().members[1]] == 'accept';
-   }
   }
   // All writes, collection listing, private account/consent details, analytics,
   // reports and email jobs are server-only. Admin SDK bypasses these rules;

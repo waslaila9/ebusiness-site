@@ -1,7 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compatibleDemoStudent, fakeStudents } from "./fake";
 import {
+  compatibleDemoStudent,
+  demoInstagramFor,
+  fakeStudents,
+  noHandleDemoStudent,
+} from "./fake";
+import {
+  applyMatchDecision,
   conversationStarter,
   firstPlanSuggestion,
   lookingMatches,
@@ -12,7 +18,6 @@ import {
 } from "./matching";
 import {
   bothAccepted,
-  contactOf,
   isMcGill,
   safeNext,
   validateProfile,
@@ -84,20 +89,24 @@ test("already paired and incomplete profiles are excluded", () => {
     false,
   );
 });
-test("phone omitted unless explicitly opted in; both accepts required", () => {
-  const p = fakeStudents()[0];
-  p.phone = "514-555-0100";
-  assert.equal("phone" in contactOf(p), false);
-  p.sharePhone = true;
-  assert.equal(contactOf(p).phone, p.phone);
+test("match decisions keep pending, pass, and mutual states distinct", () => {
   const m = pairProfiles(fakeStudents())[0];
+  const [first, second] = m.members;
   assert.equal(bothAccepted(m), false);
-  m.decisions[m.members[0]] = "accept";
+  assert.equal(applyMatchDecision(m, first, "accept"), "saved");
   assert.equal(bothAccepted(m), false);
-  m.decisions[m.members[1]] = "accept";
+  assert.equal(m.decisions[first], "accept");
+  assert.equal(m.decisions[second], "pending");
+  assert.equal(applyMatchDecision(m, second, "accept"), "saved");
   assert.equal(bothAccepted(m), true);
-  m.decisions[m.members[1]] = "pass";
-  assert.equal(bothAccepted(m), false);
+  assert.equal(applyMatchDecision(m, second, "accept"), "already-decided");
+  assert.equal(applyMatchDecision(m, "not-a-member", "accept"), "not-member");
+
+  const passed = pairProfiles(fakeStudents())[1];
+  const [passer, waiting] = passed.members;
+  assert.equal(applyMatchDecision(passed, passer, "pass"), "saved");
+  assert.equal(applyMatchDecision(passed, waiting, "accept"), "closed");
+  assert.equal(bothAccepted(passed), false);
 });
 test("validation rejects empty fields and unrecognized availability", () => {
   const p = fakeStudents()[0];
@@ -185,6 +194,12 @@ test("compatible demo student preserves profile fields and ranks first", () => {
     sharedAvailability: ["Sunday Evening"],
   });
   assert.equal(ranked[0].uid, candidate.uid);
+  assert.equal(
+    rankCandidates(me, [noHandleDemoStudent(me), candidate])[1].uid,
+    "demo-13",
+  );
+  assert.equal(demoInstagramFor(candidate.uid), "fake_casey");
+  assert.equal(demoInstagramFor("demo-13"), null);
 });
 
 test("conversation starter and plan use only shared ranking inputs", () => {

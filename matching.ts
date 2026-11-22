@@ -27,6 +27,18 @@ export function firstPlanSuggestion(sharedAvailability: string[]) {
   if (!sharedAvailability.length) return null;
   return `During ${sharedAvailability[0]}, suggest a 20-minute coffee at a public café near campus.`;
 }
+
+export function applyMatchDecision(
+  match: Match,
+  uid: string,
+  decision: "accept" | "pass",
+): "saved" | "not-member" | "already-decided" | "closed" {
+  if (!match.members.includes(uid)) return "not-member";
+  if (Object.values(match.decisions).includes("pass")) return "closed";
+  if (match.decisions[uid] !== "pending") return "already-decided";
+  match.decisions[uid] = decision;
+  return "saved";
+}
 export function score(a: Profile, b: Profile) {
   if (a.uid === b.uid || !a.completed || !b.completed || !lookingMatches(a, b)) return -1;
   const r = reasons(a, b);

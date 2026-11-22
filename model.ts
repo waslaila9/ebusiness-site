@@ -54,9 +54,6 @@ export type Profile = {
   values: string[];
   looking: Looking;
   availability: string[];
-  instagram: string;
-  sharePhone: boolean;
-  phone: string;
   completed: boolean;
   currentMatch: string | null;
 };
@@ -75,9 +72,9 @@ export type Match = {
   decisions: Record<string, "pending" | "accept" | "pass">;
   sharedInterests: string[];
   sharedAvailability: string[];
+  instagram?: Record<string, string>;
   createdAt: number;
 };
-export type Contact = { name: string; instagram: string; phone?: string };
 export type User = { uid: string; email: string };
 export const blankProfile = (uid: string): Profile => ({
   uid,
@@ -91,9 +88,6 @@ export const blankProfile = (uid: string): Profile => ({
   values: [],
   looking: "",
   availability: [],
-  instagram: "",
-  sharePhone: false,
-  phone: "",
   completed: false,
   currentMatch: null,
 });
@@ -138,11 +132,6 @@ export const cardOf = (p: Profile): Card => ({
   interests: p.interests,
   availability: p.availability,
   looking: p.looking,
-});
-export const contactOf = (p: Profile): Contact => ({
-  name: p.name,
-  instagram: p.instagram,
-  ...(p.sharePhone ? { phone: p.phone } : {}),
 });
 export const bothAccepted = (m: Match) =>
   m.members.length === 2 &&
