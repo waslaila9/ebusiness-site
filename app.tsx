@@ -202,8 +202,8 @@ function Home() {
             </Link>
           </div>
           <p className="micro">
-            A McGill email address-format check. A few fictional demo
-            questions. No verification emails sent.
+            The class demo checks only @mail.mcgill.ca address format. It
+            delivers no verification, reminder, or match emails.
           </p>
         </div>
         <div
@@ -296,9 +296,11 @@ function Home() {
           <p className="eyebrow">AT YOUR OWN PACE</p>
           <h2>A hello, on your terms.</h2>
           <p>
-            Your contact details stay hidden until you both say yes.
+            Instagram sharing is optional and available for this match only
+            after you both say yes.
             <br />
-            Pass whenever you like. Nobody can browse your profile.
+            Pass whenever you like. The class demo keeps answers in this
+            browser.
           </p>
           <Link className="quiet-link" href="/staying-safe">
             A little about staying safe ↗
@@ -469,8 +471,9 @@ function Join() {
           aria-describedby="email-help email-error"
         />
         <p id="email-help" className="field-help">
-          Use an @mail.mcgill.ca address, such as you@mail.mcgill.ca. This
-          demo checks the address format and sends no emails.
+          Use an @mail.mcgill.ca address, such as you@mail.mcgill.ca. The class
+          demo checks its format only; it does not verify ownership or send
+          emails.
         </p>
         <div id="email-error" role="alert">
           {errors.email && (
@@ -531,8 +534,9 @@ function Join() {
         </button>
       </form>
       <Note>
-        Only your match sees the answers shown on your match card. Nobody can
-        browse profiles. Your contact details stay hidden until you both accept.
+        In the class demo, your answers stay in this browser and appear on a
+        fictional match card shown to you. No other student receives them.
+        Instagram can be shared for a match only after you both say yes.
       </Note>
       <p className="micro">Independent student project for INSY 440.</p>
     </section>
@@ -829,10 +833,10 @@ function ProfileForm() {
       <h1>My profile</h1>
       <div ref={visibilityRef}>
         <Note>
-          <strong>Who sees this?</strong> Answers you save can appear on the
-          match card shown to your assigned match. The demo cannot guarantee
-          real account identity or browsing security. Contact sharing is a
-          separate step only after mutual acceptance.
+          <strong>Who sees this?</strong> In the class demo, your answers stay
+          in this browser and appear on the fictional suggestion card shown to
+          you. Instagram is not part of your profile; it is optional for each
+          match and available only after mutual acceptance.
         </Note>
       </div>
       <p className="lead">A few things about you. A better starting point.</p>
@@ -1184,7 +1188,7 @@ function FindMatches() {
             </button>
           </div>
           <p className="micro">
-            Your choice stays private. A Yes does not share contact details.
+            Your choice stays private. A yes does not share an Instagram handle.
           </p>
         </article>
       ) : (
@@ -1431,7 +1435,7 @@ function Matches() {
               {m.decisions[user!.uid] === "pass"
                 ? "You passed on this match."
                 : `${m.cards[other].name} passed on this match.`}{" "}
-              It’s closed, and no contact details were shared.
+              It’s closed, and no Instagram handles were shared.
             </Note>
           ) : bothAccepted(m) ? (
             <>
@@ -1511,7 +1515,7 @@ function Matches() {
         </div>
       )}
       <Note>
-        You’re in control. Contact details are shared only when you both accept.{" "}
+        You’re in control. Instagram is available only after mutual acceptance.{" "}
         <Link href="/staying-safe">Read Staying safe</Link>.
       </Note>
     </section>
@@ -1755,12 +1759,12 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
           <div className="decision-panel">
             <p className="eyebrow">NO BIG FIRST MOVE</p>
             <h2>Want to say hi?</h2>
-            <p>You’ll only swap contact details if you both accept.</p>
+            <p>You can share Instagram handles only if you both accept.</p>
             {closed ? (
               <Note>
                 {mine === "pass"
-                  ? "You passed. No contact details were shared."
-                  : "This match is closed. No contact details were shared."}{" "}
+                  ? "You passed. No Instagram handles were shared."
+                  : "This match is closed. No Instagram handles were shared."}{" "}
                 You don’t need to do anything else.
               </Note>
             ) : bothAccepted(m) ? (
@@ -1819,28 +1823,44 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
 }
 const faqs = [
   [
-    "Who sees my answers?",
-    "In the demo, saved answers are stored only in this browser and can appear on the card shown to your assigned fictional match. Contact sharing is a separate step only after mutual acceptance. This demo cannot enforce real browsing or identity rules.",
+    "Who sees my profile answers?",
+    "In the class demo, your answers stay in this browser and appear on the fictional suggestion card shown to you; no other student receives them. In a configured matching service, only your assigned match would see the approved card answers: first name, Looking for choice, interests, availability, and optional bio. The demo is not real-account or multi-user privacy protection.",
   ],
   [
-    "Why a McGill email?",
-    "Join checks that the address format is exactly @mail.mcgill.ca. It does not verify ownership, send email, or establish identity.",
+    "What does the @mail.mcgill.ca check do?",
+    "Join checks that the address is formatted with the exact @mail.mcgill.ca domain. The class demo does not verify that you own the address or establish your identity.",
   ],
   [
-    "How does matching work?",
-    "We pair people who chose the same connection preference. Shared interests and overlapping availability each add to the score. When two people are each other’s best available option, they are paired. Ties use a consistent ordering.",
+    "Will the class demo send me email?",
+    "No. Email delivery is off in the class demo: it sends no sign-in links, profile reminders, match notifications, or report emails. The address is used only for the local demo sign-in flow.",
+  ],
+  [
+    "How is a suggestion chosen?",
+    "Eligibility follows the Looking for answers: the same selection is compatible, and Either is compatible with Friends, Dating, or Either. Eligible candidates are ranked by shared interests and overlapping availability; ties use a stable order. The demo shows one fictional suggestion at a time.",
   ],
   [
     "Friends, dating, or either?",
-    "Choose what feels right. Friends matches with friends, dating with dating, and either with either. You both set the pace.",
+    "Choose what feels right. Friends is compatible with Friends, Dating with Dating, and Either with all three selections. You both set the pace.",
   ],
   [
     "What if I pass?",
-    "Your contact details stay hidden, and the match closes. There is no rematch flow in this first version.",
+    "Pass is saved and that person is excluded from this suggestion flow; the next eligible candidate is shown. If you pass an already-assigned match, that match closes and no new match is created automatically.",
+  ],
+  [
+    "What does pending mean?",
+    "Your yes has been saved, but the other student has not answered yet. Refreshing keeps the same pending result. Instagram is not available until you both say yes. The demo has a clearly labelled button to simulate the fictional student's second yes.",
+  ],
+  [
+    "When can I share Instagram?",
+    "Only after both people say yes. You can enter, update, or remove your own handle for that match; the other student's handle appears only if they shared one. Phone numbers are not collected or shared.",
+  ],
+  [
+    "What if there is no eligible match?",
+    "There may be no eligible suggestion right now, and a match is never guaranteed. Review or edit your Looking for choice, interests, or availability, then check again later. The demo does not email you when a suggestion becomes available.",
   ],
   [
     "How do I delete my data?",
-    "In demo mode, clear this site's browser storage to remove its local profile, decisions and reports. For a real-account request, use Contact & report a problem; no automated deletion is available.",
+    "In demo mode, clear this site's browser storage to remove the local profile, decisions, reports, and match-specific Instagram handles. For a real-account request, use Contact & report a problem; no automated deletion is available.",
   ],
   [
     "How do I report someone?",
@@ -1848,7 +1868,7 @@ const faqs = [
   ],
   [
     "When will I get a match?",
-    "Demo matching is simulated locally against fictional students. A match is not guaranteed. Check My matches; this demo sends no emails or notifications.",
+    "The class demo checks fictional students in this browser. A match is not guaranteed. Check My matches; the demo sends no emails or notifications.",
   ],
 ];
 function Questions() {
@@ -1871,6 +1891,10 @@ function Questions() {
         ))}
       </div>
       <p>
+        Need to report a concern?{" "}
+        <Link href="/contact">Contact &amp; report a problem</Link>.
+      </p>
+      <p>
         {user ? (
           <Link href="/matches">Back to My matches ↗</Link>
         ) : (
@@ -1883,6 +1907,7 @@ function Questions() {
   );
 }
 function Safe() {
+  const { user } = useSession();
   return (
     <section className="narrow page">
       <Back />
@@ -1904,7 +1929,7 @@ function Safe() {
         ],
         [
           "Keep private things private",
-          "Don’t share someone’s answers or contact details. Don’t send money or sensitive personal information.",
+          "Don’t share someone else’s answers. Share your own Instagram for this match only after you both say yes. Don’t send money or sensitive personal information.",
         ],
         [
           "Trust your comfort level",
@@ -1920,7 +1945,13 @@ function Safe() {
         Report a problem ↗
       </Link>
       <p>
-        <Link href="/matches">Go to My matches</Link>
+        {user ? (
+          <Link href="/matches">Go to My matches</Link>
+        ) : (
+          <Link href="/join?login=1&next=%2Fmatches">
+            Join or log in to see My matches
+          </Link>
+        )}
       </p>
     </section>
   );
@@ -1939,15 +1970,18 @@ function Legal({ terms }: { terms: boolean }) {
         <>
           <h2>A respectful place to meet</h2>
           <p>
-            Use a fictional @mail.mcgill.ca-format address and fictional answers
-            in this class demo. Be respectful. Do not harass, impersonate,
-            discriminate, share another person’s details or misuse the service.
+            Use a fictional address in the @mail.mcgill.ca format and fictional
+            answers in this class demo. The address check does not verify
+            ownership, and no emails are sent. Be respectful. Do not harass,
+            impersonate, discriminate, share another person’s details or misuse
+            the service.
           </p>
           <h2>Your choices</h2>
           <p>
-            You can accept or pass. A match is not guaranteed. The address check
-            does not establish identity or guarantee safety. Meeting is always
-            your choice.
+            You can accept or pass. A yes is pending until the other person
+            responds; Instagram is offered only after a mutual yes. A match is
+            not guaranteed. The address check does not establish identity or
+            guarantee safety. Meeting is always your choice.
           </p>
           <h2>Student project</h2>
           <p>
@@ -1960,33 +1994,37 @@ function Legal({ terms }: { terms: boolean }) {
         <>
           <h2>What we collect</h2>
           <p>
-            In demo mode, the browser stores the email-format input, required
-            policy consent, optional reminder preference, short profile answers,
-            fictional match decisions and reports. Instagram is requested only
-            after a mutual yes and is saved for that match.
+            In the class demo, this browser stores the email-format input,
+            required policy consent, optional reminder preference, profile
+            answers, fictional match decisions, reports, and match-specific
+            Instagram handles. The address is not verified and no emails are
+            sent. Instagram is requested only after a mutual yes.
           </p>
           <h2>Who sees what</h2>
           <p>
-            The browser-local demo has no real-account visibility controls.
-            Your answers can appear on the card shown to your assigned fictional
-            match: first name, looking-for choice, interests, availability and
-            optional bio. Instagram is shared only after mutual acceptance.
-            Phone numbers are not collected or shared.
+            In the class demo, the fictional suggestion card is shown only in
+            this browser; no other student receives your answers. In a
+            configured matching service, the assigned match sees only the
+            approved card fields: first name, Looking for choice, interests,
+            availability, and optional bio. Instagram can be shared for a match
+            only after both people accept. Phone numbers are not collected or
+            shared.
           </p>
           <h2>Where data is kept</h2>
           <p>
-            The demo stores fictional data in this browser’s local storage.
-            It sends no emails and records no external analytics. Real Firebase
-            accounts and Firestore storage are not configured unless the team
-            adds and verifies separate environment settings.
+            The demo stores fictional data in this browser’s storage, including
+            local storage. It sends no emails and records no external analytics.
+            Real Firebase accounts and Firestore storage are not configured
+            unless the team adds and verifies separate environment settings.
+            The demo is not a secure multi-user service.
           </p>
           <h2>Your data choices</h2>
           <p>
             In demo mode, clear this site's browser storage to remove the local
-            demo profile and decisions. The site has no automated account
-            deletion control. For a real-account request, use the course
-            workspace or Contact & report a problem; no Dec 31 deletion is
-            currently documented because no confirmed retention policy is active.
+            profile, decisions, reports, and match-specific Instagram handles.
+            The site has no automated account deletion control. For a real-
+            account request, use the course workspace or Contact &amp; report a
+            problem; no automated deletion is currently available.
           </p>
         </>
       )}
