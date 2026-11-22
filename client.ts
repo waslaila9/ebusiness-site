@@ -10,7 +10,7 @@ import {
   bothAccepted,
   validateProfile,
 } from "./model";
-import { fakeStudents } from "./fake";
+import { compatibleDemoStudent, fakeStudents } from "./fake";
 import { rankCandidates, reasons, lookingMatches } from "./matching";
 const key = "mcgill-matched-demo-v1";
 export type DemoScenario = "compatible" | "waiting" | "no-eligible";
@@ -89,7 +89,14 @@ export async function getCandidates(uid: string): Promise<Profile[]> {
   if (s.demoScenario === "waiting") return [];
   if (s.demoScenario === "no-eligible") return [];
   const decided = Object.keys(s.candidateDecisions);
-  return rankCandidates(me, s.profiles, decided);
+  return rankCandidates(
+    me,
+    [
+      compatibleDemoStudent(me),
+      ...s.profiles.filter((profile) => profile.uid !== "demo-00"),
+    ],
+    decided,
+  );
 }
 export function demoCandidateDecision(
   uid: string,
@@ -105,7 +112,15 @@ export function demoCandidateDecision(
   });
   if (decision === "accept") {
     const me = s.profiles.find((profile) => profile.uid === uid);
-    const candidate = s.profiles.find((profile) => profile.uid === candidateUid);
+    let candidate = s.profiles.find((profile) => profile.uid === candidateUid);
+    if (candidateUid === "demo-00" && me) {
+      candidate = compatibleDemoStudent(me);
+      const existingIndex = s.profiles.findIndex(
+        (profile) => profile.uid === candidateUid,
+      );
+      if (existingIndex < 0) s.profiles.push(candidate);
+      else s.profiles[existingIndex] = candidate;
+    }
     if (me && candidate && lookingMatches(me, candidate)) {
       const members = [uid, candidateUid].sort();
       const id = `${members[0]}_${members[1]}`;
@@ -160,30 +175,8 @@ export function setDemoScenario(scenario: DemoScenario) {
   s.demoScenario = scenario;
   s.matches = [];
   s.candidateDecisions = {};
-  let p = s.profiles.find((profile) => profile.uid === "demo-you");
-  if (!p) {
-    p = blankProfile("demo-you");
-    s.profiles.push(p);
-  }
-  Object.assign(p, {
-    uid: "demo-you",
-    name: "Alex",
-    about: "A fictional McGill student looking for a thoughtful, low-pressure hello.",
-    looking: scenario === "no-eligible" ? "friends" : "friends",
-    interests:
-      scenario === "no-eligible"
-        ? ["Volunteering"]
-        : ["Coffee walks", "Music"],
-    availability:
-      scenario === "no-eligible"
-        ? ["Sunday Evening"]
-        : ["Wednesday Afternoon", "Friday Evening"],
-    instagram: "fake_alex",
-    completed: true,
-    currentMatch: null,
-  });
   s.profiles.forEach((profile) => {
-    if (profile.uid !== "demo-you") profile.currentMatch = null;
+    profile.currentMatch = null;
   });
   s.events.push({ type: `demo-scenario-${scenario}`, at: Date.now() });
   write(s);

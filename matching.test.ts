@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { fakeStudents } from "./fake";
+import { compatibleDemoStudent, fakeStudents } from "./fake";
 import { lookingMatches, pairProfiles, rankCandidates, reasons, score } from "./matching";
 import {
   bothAccepted,
@@ -159,4 +159,22 @@ test("ranking excludes current, passed, and ineligible profiles with stable UID 
   const ineligible = { ...tieA, uid: "demo-d", looking: "dating" as const };
   const ranked = rankCandidates(me, [tieB, me, passed, ineligible, tieA], [passed.uid]);
   assert.deepEqual(ranked.map((profile) => profile.uid), ["demo-a", "demo-b"]);
+});
+
+test("compatible demo student preserves profile fields and ranks first", () => {
+  const me = fakeStudents()[0];
+  me.uid = "demo-you";
+  me.looking = "either";
+  me.interests = ["Music", "Books"];
+  me.availability = ["Sunday Evening"];
+  const candidate = compatibleDemoStudent(me);
+  const ranked = rankCandidates(me, [...fakeStudents(), candidate]);
+
+  assert.equal(candidate.uid, "demo-00");
+  assert.equal(lookingMatches(me, candidate), true);
+  assert.deepEqual(reasons(me, candidate), {
+    sharedInterests: ["Books", "Music"],
+    sharedAvailability: ["Sunday Evening"],
+  });
+  assert.equal(ranked[0].uid, candidate.uid);
 });

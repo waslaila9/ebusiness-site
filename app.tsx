@@ -940,15 +940,20 @@ function Saved() {
       <Back href="/profile">My profile</Back>
       <p className="eyebrow">YOU DID YOUR PART</p>
       <h1>Profile saved</h1>
-      <p className="lead">Now leave the introductions to us.</p>
+      <p className="lead">
+        {demo
+          ? "Your profile is saved and ready for a suggestion."
+          : "Now leave the introductions to us."}
+      </p>
       <p>
-        We’ll email you when you have a match. You’ll see what you have in
-        common, a few ways to start talking, and easy ideas for meeting up.
+        {demo
+          ? "Open My matches to see one fictional student suggestion based on your Looking for choice, interests, and availability."
+          : "We’ll email you when you have a match. You’ll see what you have in common, a few ways to start talking, and easy ideas for meeting up."}
       </p>
       {demo && (
         <Note>
-          Demo only: matching runs immediately using fictional students. The
-          notification is logged in your browser console.
+          Demo only: suggestions use fictional students in this browser. No
+          notification email is sent.
         </Note>
       )}
       <Link className="button" href="/matches">
@@ -1167,6 +1172,29 @@ function Matches() {
       <p className="eyebrow">ONE THOUGHTFUL INTRODUCTION</p>
       <h1>My matches</h1>
       <p className="lead">A little common ground is a good place to start.</p>
+      {demo && p?.completed && (
+        <div className="demo-scenarios">
+          <p className="micro">Demo scenarios</p>
+          {(["compatible", "waiting", "no-eligible"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              className="text-btn"
+              aria-pressed={scenario === option}
+              onClick={() => {
+                setDemoScenario(option);
+                load();
+              }}
+            >
+              {option === "compatible"
+                ? "Show compatible suggestion"
+                : option === "waiting"
+                  ? "Show waiting state"
+                  : "Show no-eligible state"}
+            </button>
+          ))}
+        </div>
+      )}
       {error ? (
         <>
           <ErrorBox message={error} />
@@ -1352,33 +1380,11 @@ function Matches() {
               ? "Complete your interests, availability, and Looking for selection first."
               : scenario === "waiting"
                 ? "This demo is waiting before a suggestion is available. Come back later; your profile is saved."
-                : "Edit your interests or availability to create more common ground, or return later."}
+                : "This demo scenario has no eligible suggestions. Edit your interests or availability, then choose Show compatible suggestion above, or return later."}
           </p>
           <Link className="button secondary" href="/profile">
             {p?.completed ? "View My profile" : "Complete My profile"} ↗
           </Link>
-          {demo && (
-            <div className="demo-scenarios">
-              <p className="micro">Demo scenarios</p>
-              {(["compatible", "waiting", "no-eligible"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  className="text-btn"
-                  onClick={() => {
-                    setDemoScenario(option);
-                    load();
-                  }}
-                >
-                  {option === "compatible"
-                    ? "Show compatible suggestion"
-                    : option === "waiting"
-                      ? "Show waiting state"
-                      : "Show no-eligible state"}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       )}
       <Note>
