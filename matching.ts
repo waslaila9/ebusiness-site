@@ -16,6 +16,17 @@ export function reasons(a: Profile, b: Profile) {
     ).sort(),
   };
 }
+
+export function conversationStarter(sharedInterests: string[]) {
+  return sharedInterests.length
+    ? `Hey! I noticed we both enjoy ${sharedInterests[0].toLowerCase()}. How did you get into it?`
+    : "Hey! What has been the best surprise about McGill so far?";
+}
+
+export function firstPlanSuggestion(sharedAvailability: string[]) {
+  if (!sharedAvailability.length) return null;
+  return `During ${sharedAvailability[0]}, suggest a 20-minute coffee at a public café near campus.`;
+}
 export function score(a: Profile, b: Profile) {
   if (a.uid === b.uid || !a.completed || !b.completed || !lookingMatches(a, b)) return -1;
   const r = reasons(a, b);

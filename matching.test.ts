@@ -1,7 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { compatibleDemoStudent, fakeStudents } from "./fake";
-import { lookingMatches, pairProfiles, rankCandidates, reasons, score } from "./matching";
+import {
+  conversationStarter,
+  firstPlanSuggestion,
+  lookingMatches,
+  pairProfiles,
+  rankCandidates,
+  reasons,
+  score,
+} from "./matching";
 import {
   bothAccepted,
   contactOf,
@@ -177,4 +185,20 @@ test("compatible demo student preserves profile fields and ranks first", () => {
     sharedAvailability: ["Sunday Evening"],
   });
   assert.equal(ranked[0].uid, candidate.uid);
+});
+
+test("conversation starter and plan use only shared ranking inputs", () => {
+  assert.equal(
+    conversationStarter(["Music"]),
+    "Hey! I noticed we both enjoy music. How did you get into it?",
+  );
+  assert.equal(
+    conversationStarter([]),
+    "Hey! What has been the best surprise about McGill so far?",
+  );
+  assert.equal(
+    firstPlanSuggestion(["Wednesday Afternoon"]),
+    "During Wednesday Afternoon, suggest a 20-minute coffee at a public café near campus.",
+  );
+  assert.equal(firstPlanSuggestion([]), null);
 });

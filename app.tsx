@@ -39,7 +39,11 @@ import {
   local,
   recordDemoEvent,
 } from "./client";
-import { reasons } from "./matching";
+import {
+  conversationStarter,
+  firstPlanSuggestion,
+  reasons,
+} from "./matching";
 import { useSession } from "./session";
 const support = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
 const supportHref = support ? `mailto:${support}` : "/contact";
@@ -72,6 +76,87 @@ function ErrorBox({ message }: { message: string }) {
       {message} <span>Try again using the button below.</span>
     </p>
   ) : null;
+}
+function MatchConversation({
+  sharedInterests,
+  sharedAvailability,
+}: {
+  sharedInterests: string[];
+  sharedAvailability: string[];
+}) {
+  const opener = conversationStarter(sharedInterests);
+  const plan = firstPlanSuggestion(sharedAvailability);
+  const [copyStatus, setCopyStatus] = useState<
+    "idle" | "copied" | "manual"
+  >("idle");
+
+  async function copyOpener() {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Unavailable");
+      await navigator.clipboard.writeText(opener);
+      setCopyStatus("copied");
+    } catch {
+      setCopyStatus("manual");
+    }
+  }
+
+  return (
+    <div className="match-conversation">
+      <section className="why-you-matched" aria-labelledby="why-matched">
+        <p className="eyebrow">WHY YOU MATCHED</p>
+        <h2 id="why-matched">A little common ground</h2>
+        {sharedInterests.length ? (
+          <p>You both enjoy {sharedInterests.join(", ")}.</p>
+        ) : (
+          <p>
+            No shared interests were listed. Looking for compatibility still
+            brought you together.
+          </p>
+        )}
+        {sharedAvailability.length ? (
+          <p className="shared-time">
+            <strong>Shared time:</strong> {sharedAvailability.join(", ")}
+          </p>
+        ) : (
+          <p className="shared-time">No shared time is listed.</p>
+        )}
+      </section>
+      <section className="conversation-opener" aria-labelledby="conversation-opener">
+        <h3 id="conversation-opener">A ready-to-copy first line</h3>
+        <blockquote>{opener}</blockquote>
+        <button
+          type="button"
+          className="button secondary"
+          onClick={copyOpener}
+          aria-label="Copy the first-line conversation starter"
+        >
+          {copyStatus === "copied" ? "Copied" : "Copy opener"}
+        </button>
+        <p className="copy-status" role="status" aria-live="polite">
+          {copyStatus === "copied"
+            ? "Copied. Paste it wherever you want to say hello."
+            : copyStatus === "manual"
+              ? "Copy did not work. Select the opener below and copy it manually."
+              : ""}
+        </p>
+        {copyStatus === "manual" && (
+          <textarea
+            className="manual-copy"
+            readOnly
+            value={opener}
+            aria-label="Conversation opener for manual copying"
+            onFocus={(event) => event.currentTarget.select()}
+          />
+        )}
+      </section>
+      {plan && (
+        <aside className="first-plan" aria-label="First plan suggestion">
+          <h3>Simple first-plan idea</h3>
+          <p>{plan}</p>
+        </aside>
+      )}
+    </div>
+  );
 }
 function Member({ children }: { children: ReactNode }) {
   const { user, ready } = useSession(),
@@ -1223,34 +1308,10 @@ function Matches() {
             {suggestion.about ||
               "A fictional McGill student open to a low-pressure hello."}
           </p>
-          <div className="chips">
-            {reasons(p, suggestion).sharedInterests.map((interest) => (
-              <span key={interest}>{interest}</span>
-            ))}
-          </div>
-          <details className="candidate-details">
-            <summary>See why this student was suggested</summary>
-            <div className="candidate-detail-grid">
-              <div>
-                <strong>Shared interests</strong>
-                <p>
-                  {reasons(p, suggestion).sharedInterests.join(" · ") ||
-                    "None listed"}
-                </p>
-              </div>
-              <div>
-                <strong>Overlapping availability</strong>
-                <p>
-                  {reasons(p, suggestion).sharedAvailability.join(" · ") ||
-                    "No overlap"}
-                </p>
-              </div>
-              <div>
-                <strong>Looking for</strong>
-                <p>{suggestion.looking}</p>
-              </div>
-            </div>
-          </details>
+          <MatchConversation
+            sharedInterests={reasons(p, suggestion).sharedInterests}
+            sharedAvailability={reasons(p, suggestion).sharedAvailability}
+          />
           <div className="decision-actions">
             <button
               className="button pass-action"
@@ -1290,28 +1351,10 @@ function Matches() {
             {m.cards[other].about ||
               "Someone who shares a little common ground and is open to a low-pressure hello."}
           </p>
-          <div className="chips">
-            {m.sharedInterests.map((x) => (
-              <span key={x}>{x}</span>
-            ))}
-          </div>
-          <details className="candidate-details">
-            <summary>See more about {m.cards[other].name}</summary>
-            <div className="candidate-detail-grid">
-              <div>
-                <strong>They enjoy</strong>
-                <p>{m.cards[other].interests.join(" · ")}</p>
-              </div>
-              <div>
-                <strong>Usually free</strong>
-                <p>
-                  {m.sharedAvailability.length
-                    ? m.sharedAvailability.join(" · ")
-                    : "Ask what time works"}
-                </p>
-              </div>
-            </div>
-          </details>
+          <MatchConversation
+            sharedInterests={m.sharedInterests}
+            sharedAvailability={m.sharedAvailability}
+          />
           {error && <ErrorBox message={error} />}
           {m.decisions[user!.uid] === "pass" ||
           m.decisions[other] === "pass" ? (
@@ -1535,6 +1578,10 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
           <p>Looking for {card.looking}</p>
         </div>
       </div>
+      <MatchConversation
+        sharedInterests={m.sharedInterests}
+        sharedAvailability={m.sharedAvailability}
+      />
       <div className="match-layout">
         <div>
           <article className="panel">
@@ -1562,34 +1609,14 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
           <article className="panel">
             <h2>A few ways to say hi</h2>
             <ol className="starters">
-              <li>What’s one campus spot you’d take a new friend to?</li>
               <li>
                 {m.sharedInterests[0]
-                  ? `How did you get into ${m.sharedInterests[0].toLowerCase()}?`
+                  ? conversationStarter(m.sharedInterests)
                   : "What would you love to try this semester?"}
               </li>
               <li>What’s been the best surprise about McGill so far?</li>
               <li>Got a go-to study-break ritual?</li>
             </ol>
-          </article>
-          <article className="panel">
-            <h2>A first plan, kept simple</h2>
-            <p className="field-help">
-              These are low-cost starting points near campus. Check hours before
-              you go.
-            </p>
-            <ul className="plans">
-              {[
-                "A short coffee at Café Olimpico on Saint-Laurent",
-                "A 20-minute walk through the McGill campus paths",
-                "A study break at the McLennan Library café",
-                "A free visit to the Redpath Museum galleries",
-                "A bring-your-own-snack break at Mount Royal Park",
-                "A quick browse at Paragraphe Bookstore",
-              ].map((x) => (
-                <li key={x}>{x}</li>
-              ))}
-            </ul>
           </article>
         </div>
         <aside>
@@ -1634,7 +1661,7 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
                   disabled={busy}
                   onClick={() => act("accept")}
                 >
-                  {busy ? "Saving…" : "Accept"} ↗
+                  {busy ? "Saving…" : "Say yes"} ↗
                 </button>
                 <button
                   className="button secondary full"
