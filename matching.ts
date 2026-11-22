@@ -1,26 +1,55 @@
 import { Profile, Match, cardOf } from "./model";
-export function programMatches(_a: Profile, _b: Profile) {
-  return false;
+
+export function lookingMatches(a: Profile, b: Profile) {
+  if (!["friends", "dating", "either"].includes(a.looking)) return false;
+  if (!["friends", "dating", "either"].includes(b.looking)) return false;
+  return a.looking === "either" || b.looking === "either" || a.looking === b.looking;
 }
+
 export function reasons(a: Profile, b: Profile) {
   return {
-    sharedInterests: [...new Set(a.interests)].filter((x) =>
-      b.interests.includes(x),
-    ),
-    sharedAvailability: [...new Set(a.availability)].filter((x) =>
-      b.availability.includes(x),
-    ),
-    sharedProgram: programMatches(a, b),
+    sharedInterests: [...new Set(a.interests || [])].filter((x) =>
+      (b.interests || []).includes(x),
+    ).sort(),
+    sharedAvailability: [...new Set(a.availability || [])].filter((x) =>
+      (b.availability || []).includes(x),
+    ).sort(),
   };
 }
 export function score(a: Profile, b: Profile) {
-  if (a.uid === b.uid || a.looking !== b.looking) return -1;
+  if (a.uid === b.uid || !a.completed || !b.completed || !lookingMatches(a, b)) return -1;
   const r = reasons(a, b);
-  return (
-    r.sharedInterests.length +
-    r.sharedAvailability.length +
-    (r.sharedProgram ? 2 : 0)
-  );
+  return r.sharedInterests.length + r.sharedAvailability.length;
+}
+
+export function rankCandidates(
+  me: Profile,
+  candidates: Profile[],
+  passed: string[] = [],
+) {
+  const passedSet = new Set(passed);
+  return candidates
+    .filter((candidate) =>
+      candidate.uid !== me.uid &&
+      candidate.completed &&
+      !candidate.currentMatch &&
+      !passedSet.has(candidate.uid) &&
+      score(me, candidate) >= 0,
+    )
+    .sort((a, b) => {
+      const sharedA = reasons(me, a);
+      const sharedB = reasons(me, b);
+      const scoreDifference =
+        score(me, b) - score(me, a);
+      if (scoreDifference) return scoreDifference;
+      const interestDifference =
+        sharedB.sharedInterests.length - sharedA.sharedInterests.length;
+      if (interestDifference) return interestDifference;
+      const availabilityDifference =
+        sharedB.sharedAvailability.length - sharedA.sharedAvailability.length;
+      if (availabilityDifference) return availabilityDifference;
+      return a.uid.localeCompare(b.uid);
+    });
 }
 // Recompute each remaining person's best choice after mutual pairs are removed.
 // Stable UID tie-breaking makes every run deterministic.
@@ -32,11 +61,7 @@ export function pairProfiles(profiles: Profile[]): Match[] {
   while (remaining.length > 1) {
     const best = new Map<string, string>();
     for (const a of remaining) {
-      const candidates = remaining
-        .filter((b) => score(a, b) >= 0)
-        .sort(
-          (b, c) => score(a, c) - score(a, b) || b.uid.localeCompare(c.uid),
-        );
+      const candidates = rankCandidates(a, remaining);
       if (candidates[0]) best.set(a.uid, candidates[0].uid);
     }
     const used = new Set<string>();

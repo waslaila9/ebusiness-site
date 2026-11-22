@@ -45,11 +45,11 @@ export type Looking = "" | "friends" | "dating" | "either";
 export type Profile = {
   uid: string;
   name: string;
-  programCategory: string;
-  program: string;
-  year: string;
+  programCategory?: string;
+  program?: string;
+  year?: string;
   about: string;
-  socialStyle: "one-on-one" | "small-groups" | "either";
+  socialStyle?: "one-on-one" | "small-groups" | "either";
   interests: string[];
   values: string[];
   looking: Looking;
@@ -75,7 +75,6 @@ export type Match = {
   decisions: Record<string, "pending" | "accept" | "pass">;
   sharedInterests: string[];
   sharedAvailability: string[];
-  sharedProgram: boolean;
   createdAt: number;
 };
 export type Contact = { name: string; instagram: string; phone?: string };

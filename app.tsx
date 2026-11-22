@@ -32,11 +32,14 @@ import {
   demoOtherAccept,
   demoCandidateDecision,
   resetDemoCandidates,
+  getDemoScenario,
+  setDemoScenario,
   request,
   report,
   local,
   recordDemoEvent,
 } from "./client";
+import { reasons } from "./matching";
 import { useSession } from "./session";
 const support = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
 const supportHref = support ? `mailto:${support}` : "/contact";
@@ -1095,6 +1098,8 @@ function Matches() {
   const { user } = useSession(),
     [p, setP] = useState<Profile | null>(null),
     [m, setM] = useState<Match | null>(null),
+    [suggestion, setSuggestion] = useState<Profile | null>(null),
+    [scenario, setScenario] = useState<"compatible" | "waiting" | "no-eligible">("compatible"),
     [loaded, setLoaded] = useState(false),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -1103,11 +1108,18 @@ function Matches() {
     try {
       const profile = await getProfile(user!.uid);
       setP(profile);
-      setM(
-        profile?.currentMatch
-          ? await getMatch(profile.currentMatch, user!.uid)
-          : null,
-      );
+      const existing = profile?.currentMatch
+        ? await getMatch(profile.currentMatch, user!.uid)
+        : null;
+      setM(existing);
+      if (demo && profile && profile.completed && !existing) {
+        setScenario(getDemoScenario());
+        const candidates = await getCandidates(user!.uid);
+        setSuggestion(candidates[0] || null);
+      } else {
+        setSuggestion(null);
+        if (demo) setScenario(getDemoScenario());
+      }
       setLoaded(true);
     } catch {
       setError("Could not load your match. Try again.");
@@ -1122,6 +1134,19 @@ function Matches() {
     setError("");
     try {
       await decide(m.id, user.uid, decision);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your choice.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function actSuggestion(decision: "accept" | "pass") {
+    if (!suggestion || !user) return;
+    setBusy(true);
+    setError("");
+    try {
+      demoCandidateDecision(user.uid, suggestion.uid, decision);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save your choice.");
@@ -1151,6 +1176,73 @@ function Matches() {
         </>
       ) : !loaded ? (
         <p>Looking for your match…</p>
+      ) : suggestion && p ? (
+        <article className="candidate-card">
+          <div className="candidate-topline">
+            <span className="eyebrow">FICTIONAL STUDENT SUGGESTION</span>
+            <span className="candidate-count">1 of 1</span>
+          </div>
+          <div className="candidate-identity">
+            <div className="monogram" aria-hidden="true">
+              {suggestion.name.slice(0, 1)}
+            </div>
+            <div>
+              <h2>{suggestion.name}</h2>
+              <p>Looking for {suggestion.looking}</p>
+            </div>
+          </div>
+          <p className="candidate-intro">
+            {suggestion.about ||
+              "A fictional McGill student open to a low-pressure hello."}
+          </p>
+          <div className="chips">
+            {reasons(p, suggestion).sharedInterests.map((interest) => (
+              <span key={interest}>{interest}</span>
+            ))}
+          </div>
+          <details className="candidate-details">
+            <summary>See why this student was suggested</summary>
+            <div className="candidate-detail-grid">
+              <div>
+                <strong>Shared interests</strong>
+                <p>
+                  {reasons(p, suggestion).sharedInterests.join(" · ") ||
+                    "None listed"}
+                </p>
+              </div>
+              <div>
+                <strong>Overlapping availability</strong>
+                <p>
+                  {reasons(p, suggestion).sharedAvailability.join(" · ") ||
+                    "No overlap"}
+                </p>
+              </div>
+              <div>
+                <strong>Looking for</strong>
+                <p>{suggestion.looking}</p>
+              </div>
+            </div>
+          </details>
+          <div className="decision-actions">
+            <button
+              className="button pass-action"
+              disabled={busy}
+              onClick={() => actSuggestion("pass")}
+            >
+              No, pass
+            </button>
+            <button
+              className="button yes-action"
+              disabled={busy}
+              onClick={() => actSuggestion("accept")}
+            >
+              {busy ? "Saving…" : "Yes, connect"} ↗
+            </button>
+          </div>
+          <p className="micro">
+            Passing excludes this student from the next suggestion. Reloading will keep the ranked result stable.
+          </p>
+        </article>
       ) : m && other ? (
         <article className="candidate-card">
           <div className="candidate-topline">
@@ -1246,15 +1338,47 @@ function Matches() {
             <i />
             <i />
           </div>
-          <h2>No match yet, we&apos;ll email you.</h2>
+          <h2>
+            {!p || !p.completed
+              ? "Finish My profile before finding a match."
+              : scenario === "waiting"
+                ? "A suggestion is on its way."
+                : scenario === "no-eligible"
+                  ? "No eligible match right now."
+                  : "No eligible match right now."}
+          </h2>
           <p>
-            {p
-              ? "You’re in the mix. Check back here after the team runs matching."
-              : "Answer a few questions so we can find some common ground."}
+            {!p || !p.completed
+              ? "Complete your interests, availability, and Looking for selection first."
+              : scenario === "waiting"
+                ? "This demo is waiting before a suggestion is available. Come back later; your profile is saved."
+                : "Edit your interests or availability to create more common ground, or return later."}
           </p>
           <Link className="button secondary" href="/profile">
-            {p ? "View My profile" : "Complete My profile"} ↗
+            {p?.completed ? "View My profile" : "Complete My profile"} ↗
           </Link>
+          {demo && (
+            <div className="demo-scenarios">
+              <p className="micro">Demo scenarios</p>
+              {(["compatible", "waiting", "no-eligible"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className="text-btn"
+                  onClick={() => {
+                    setDemoScenario(option);
+                    load();
+                  }}
+                >
+                  {option === "compatible"
+                    ? "Show compatible suggestion"
+                    : option === "waiting"
+                      ? "Show waiting state"
+                      : "Show no-eligible state"}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       <Note>

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fakeStudents } from "./fake";
-import { pairProfiles, reasons, score } from "./matching";
+import { lookingMatches, pairProfiles, rankCandidates, reasons, score } from "./matching";
 import {
   bothAccepted,
   contactOf,
@@ -26,7 +26,7 @@ test("post-login return paths cannot become external redirects", () => {
   assert.equal(safeNext("//evil.com"), "/profile");
   assert.equal(safeNext("/matches/abc/connected"), "/matches/abc/connected");
 });
-test("matching requires identical looking-for and never duplicates a member", () => {
+test("matching uses looking-for compatibility and never duplicates a member", () => {
   const p = fakeStudents(),
     out = pairProfiles(p);
   assert.equal(out.length, 6);
@@ -38,12 +38,11 @@ test("matching requires identical looking-for and never duplicates a member", ()
     }
     const a = p.find((x) => x.uid === m.members[0])!,
       b = p.find((x) => x.uid === m.members[1])!;
-    assert.equal(a.looking, b.looking);
+    assert.equal(lookingMatches(a, b), true);
     assert.deepEqual(
       {
         sharedInterests: m.sharedInterests,
         sharedAvailability: m.sharedAvailability,
-        sharedProgram: m.sharedProgram,
       },
       reasons(a, b),
     );
@@ -125,4 +124,39 @@ test("short profile allows blank bio and rejects missing required answers", () =
       ],
     } as unknown as Profile).interests,
   );
+});
+
+test("either is compatible and ranking uses only interests and availability", () => {
+  const p = fakeStudents()[0];
+  const friend = fakeStudents()[1];
+  const dating = fakeStudents()[4];
+  dating.looking = "dating";
+  p.looking = "friends";
+  friend.looking = "either";
+  assert.equal(lookingMatches(p, friend), true);
+  assert.equal(lookingMatches(p, dating), false);
+
+  const base = fakeStudents()[0];
+  const candidateA = { ...fakeStudents()[1], uid: "demo-a", program: "Science", interests: ["Music"], availability: ["Wednesday Afternoon"] };
+  const candidateB = { ...fakeStudents()[2], uid: "demo-b", program: "Arts", interests: ["Music"], availability: ["Wednesday Afternoon"] };
+  base.looking = "either";
+  base.interests = ["Music"];
+  base.availability = ["Wednesday Afternoon"];
+  candidateA.looking = "either";
+  candidateB.looking = "either";
+  assert.equal(score(base, candidateA), score(base, candidateB));
+});
+
+test("ranking excludes current, passed, and ineligible profiles with stable UID ties", () => {
+  const me = fakeStudents()[0];
+  me.uid = "demo-you";
+  me.looking = "friends";
+  me.interests = ["Music"];
+  me.availability = ["Wednesday Afternoon"];
+  const tieA = { ...fakeStudents()[1], uid: "demo-a", looking: "friends" as const, interests: ["Music"], availability: ["Wednesday Afternoon"] };
+  const tieB = { ...fakeStudents()[2], uid: "demo-b", looking: "friends" as const, interests: ["Music"], availability: ["Wednesday Afternoon"] };
+  const passed = { ...tieA, uid: "demo-c", interests: ["Music"], availability: ["Wednesday Afternoon"] };
+  const ineligible = { ...tieA, uid: "demo-d", looking: "dating" as const };
+  const ranked = rankCandidates(me, [tieB, me, passed, ineligible, tieA], [passed.uid]);
+  assert.deepEqual(ranked.map((profile) => profile.uid), ["demo-a", "demo-b"]);
 });

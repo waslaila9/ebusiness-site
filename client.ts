@@ -11,8 +11,9 @@ import {
   validateProfile,
 } from "./model";
 import { fakeStudents } from "./fake";
-import { pairProfiles, score } from "./matching";
+import { rankCandidates, reasons, lookingMatches } from "./matching";
 const key = "mcgill-matched-demo-v1";
+export type DemoScenario = "compatible" | "waiting" | "no-eligible";
 type State = {
   user: User | null;
   profiles: Profile[];
@@ -20,6 +21,7 @@ type State = {
   events: { type: string; at: number }[];
   reports: string[];
   candidateDecisions: Record<string, "accept" | "pass">;
+  demoScenario?: DemoScenario;
 };
 export function local(): State {
   const raw = localStorage.getItem(key);
@@ -84,13 +86,10 @@ export async function getCandidates(uid: string): Promise<Profile[]> {
   const s = local();
   const me = s.profiles.find((profile) => profile.uid === uid);
   if (!me) return [];
-  return s.profiles.filter(
-    (profile) =>
-      profile.uid !== uid &&
-      profile.completed &&
-      s.candidateDecisions[profile.uid] === undefined &&
-      score(me, profile) >= 0,
-  );
+  if (s.demoScenario === "waiting") return [];
+  if (s.demoScenario === "no-eligible") return [];
+  const decided = Object.keys(s.candidateDecisions);
+  return rankCandidates(me, s.profiles, decided);
 }
 export function demoCandidateDecision(
   uid: string,
@@ -104,12 +103,89 @@ export function demoCandidateDecision(
     type: decision === "accept" ? "candidate-yes" : "candidate-pass",
     at: Date.now(),
   });
+  if (decision === "accept") {
+    const me = s.profiles.find((profile) => profile.uid === uid);
+    const candidate = s.profiles.find((profile) => profile.uid === candidateUid);
+    if (me && candidate && lookingMatches(me, candidate)) {
+      const members = [uid, candidateUid].sort();
+      const id = `${members[0]}_${members[1]}`;
+      let match = s.matches.find((item) => item.id === id);
+      if (!match) {
+        match = {
+          id,
+          members,
+          cards: {
+            [me.uid]: {
+              name: me.name,
+              about: me.about,
+              interests: me.interests,
+              availability: me.availability,
+              looking: me.looking,
+            },
+            [candidate.uid]: {
+              name: candidate.name,
+              about: candidate.about,
+              interests: candidate.interests,
+              availability: candidate.availability,
+              looking: candidate.looking,
+            },
+          },
+          decisions: {
+            [me.uid]: "accept",
+            [candidate.uid]: "pending",
+          },
+          ...reasons(me, candidate),
+          createdAt: Date.now(),
+        };
+        s.matches.push(match);
+        me.currentMatch = id;
+        candidate.currentMatch = id;
+      }
+    }
+  }
   write(s);
 }
 export function resetDemoCandidates() {
   if (!demo) return;
   const s = local();
   s.candidateDecisions = {};
+  write(s);
+}
+export function getDemoScenario(): DemoScenario {
+  return demo ? (local().demoScenario || "compatible") : "compatible";
+}
+export function setDemoScenario(scenario: DemoScenario) {
+  if (!demo) return;
+  const s = local();
+  s.demoScenario = scenario;
+  s.matches = [];
+  s.candidateDecisions = {};
+  let p = s.profiles.find((profile) => profile.uid === "demo-you");
+  if (!p) {
+    p = blankProfile("demo-you");
+    s.profiles.push(p);
+  }
+  Object.assign(p, {
+    uid: "demo-you",
+    name: "Alex",
+    about: "A fictional McGill student looking for a thoughtful, low-pressure hello.",
+    looking: scenario === "no-eligible" ? "friends" : "friends",
+    interests:
+      scenario === "no-eligible"
+        ? ["Volunteering"]
+        : ["Coffee walks", "Music"],
+    availability:
+      scenario === "no-eligible"
+        ? ["Sunday Evening"]
+        : ["Wednesday Afternoon", "Friday Evening"],
+    instagram: "fake_alex",
+    completed: true,
+    currentMatch: null,
+  });
+  s.profiles.forEach((profile) => {
+    if (profile.uid !== "demo-you") profile.currentMatch = null;
+  });
+  s.events.push({ type: `demo-scenario-${scenario}`, at: Date.now() });
   write(s);
 }
 export async function saveProfile(p: Profile) {
@@ -136,23 +212,6 @@ export async function saveProfile(p: Profile) {
     phone: p.sharePhone ? p.phone : "",
     completed: true,
   });
-  const matches = pairProfiles([
-    s.profiles.find((x) => x.uid === p.uid)!,
-    ...s.profiles
-      .filter(
-        (x) => x.uid !== p.uid && x.looking === p.looking && !x.currentMatch,
-      )
-      .slice(0, 3),
-  ]);
-  for (const m of matches) {
-    s.matches.push(m);
-    m.members.forEach((uid) => {
-      s.profiles.find((x) => x.uid === uid)!.currentMatch = m.id;
-    });
-    console.info(
-      "[DEMO EMAIL] You have a match — open My matches. No email was sent.",
-    );
-  }
   s.events.push({ type: "O2", at: Date.now() });
   write(s);
 }
