@@ -1507,7 +1507,7 @@ function Matches() {
               ? "Complete your interests, availability, and Looking for selection first."
               : scenario === "waiting"
                 ? "This demo is waiting before a suggestion is available. Come back later; your profile is saved."
-                : "This demo scenario has no eligible suggestions. Edit your interests or availability, then choose Show compatible suggestion above, or return later."}
+                : "This demo scenario has no eligible suggestions. Review your Looking for choice to change eligibility, or edit interests and availability to affect ranking. Choose Show compatible suggestion above to try again, or return later."}
           </p>
           <Link className="button secondary" href="/profile">
             {p?.completed ? "View My profile" : "Complete My profile"} ↗
@@ -1677,6 +1677,7 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
               ) : (
                 <p>
                   {card.name} hasn’t shared an Instagram handle for this match.
+                  It will appear here only if they choose to share it.
                 </p>
               )}
             </article>
