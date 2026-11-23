@@ -1,4 +1,18 @@
-import { Profile, Match, cardOf } from "./model";
+import { Profile, Match, cardOf, days, times } from "./model";
+
+export function sortAvailability(slots: string[]) {
+  return [...slots].sort((a, b) => {
+    const [dayA, ...timeA] = a.split(" ");
+    const [dayB, ...timeB] = b.split(" ");
+    return (
+      days.indexOf(dayA as (typeof days)[number]) -
+        days.indexOf(dayB as (typeof days)[number]) ||
+      times.indexOf(timeA.join(" ") as (typeof times)[number]) -
+        times.indexOf(timeB.join(" ") as (typeof times)[number]) ||
+      a.localeCompare(b)
+    );
+  });
+}
 
 export function lookingMatches(a: Profile, b: Profile) {
   if (!["friends", "dating", "either"].includes(a.looking)) return false;
@@ -11,9 +25,11 @@ export function reasons(a: Profile, b: Profile) {
     sharedInterests: [...new Set(a.interests || [])].filter((x) =>
       (b.interests || []).includes(x),
     ).sort(),
-    sharedAvailability: [...new Set(a.availability || [])].filter((x) =>
-      (b.availability || []).includes(x),
-    ).sort(),
+    sharedAvailability: sortAvailability(
+      [...new Set(a.availability || [])].filter((x) =>
+        (b.availability || []).includes(x),
+      ),
+    ),
   };
 }
 

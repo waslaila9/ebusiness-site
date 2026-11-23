@@ -34,14 +34,20 @@ Use Vercel for this project rather than GitHub Pages: it needs Next.js server ro
 - Join with an `@mail.mcgill.ca` address and check the required agreement. No email is sent.
 - Click **Continue in demo mode** to enter My profile directly.
 - Complete the first name, looking-for, interests, and availability fields; add an optional bio.
-- Open My matches. Casey is the first compatible fixture; Taylor is a second, equally compatible fixture without a shared Instagram handle. Only one suggestion is shown at a time.
-- To verify Pass, choose **No, pass** on Casey, then refresh. Casey remains excluded and Taylor is shown.
+- For the Casey/Taylor flow, use **Music**, **Sunday Evening**, and **Friends**. Open My matches: Casey is first and Taylor is next after a pass. One fictional suggestion is shown at a time; both keep stable names and IDs.
+- To verify Pass, double-click **No, pass** on Casey, then refresh. Casey remains excluded, Taylor is shown, and no stale-suggestion error appears.
 - Choose **Show compatible suggestion** to reset the demo match flow. Choose **Yes, connect** on Casey. The match shows your saved yes as **Pending**; refresh and confirm there is no Instagram form or handle reveal.
-- Choose **Demo: simulate Casey's second yes**. The card changes to **Mutual yes**; **Continue to Instagram** opens the match-specific sharing step. Enter a fictional handle such as `demo_ayden`; Casey's fixture handle is `fake_casey`.
+- Choose **Demo: simulate Casey's second yes**. The card changes to **Mutual yes**; **Continue to Instagram** opens the match-specific sharing step. Enter a fictional handle such as `demo_ayden`; Casey's fictional handle is displayed as plain text.
 - To verify a missing partner handle, return to My matches, choose **Show compatible suggestion**, pass Casey, say yes to Taylor, then simulate Taylor's second yes. The Instagram step honestly says Taylor has not shared a handle.
 - Demo decisions and match-scoped handles persist in this browser. Clear this site's browser storage to repeat from scratch. Different browsers have independent demos.
-- Browser console logs the demo “You have a match” email. Demo reports and O1/O2/O3 events remain in browser storage.
+- Browser console logs the demo “You have a match” email. Route B demo events use named event types; demo-only decisions and scenario events are marked `demo_internal`.
+- The Route B event types are `sign_up`, `join_error` (with a reason), `form_start`, `visibility_note_view`, `profile_complete`, and `mutual_accept`. Older `O1`, `O2`, and `join_error:<reason>` demo records are removed when the browser state loads.
 - This mode is a simulation, not identity verification or secure multi-user storage. Use only fictional answers and handles in it.
+
+### Reproducible matching checks
+
+- **Music + Books, Wednesday Afternoon + Friday Evening, Friends:** Sam (`demo-01`) is the expected top suggestion. The reason is shared Music and Books plus both time slots.
+- **Art + Gaming, Saturday Morning, Friends:** Noor (`demo-04`) is the expected top suggestion. The reason is shared Art and Gaming plus Saturday Morning.
 
 ## Connect real Firebase data and email sign-in
 
@@ -95,7 +101,7 @@ Firebase replaces the original Supabase choice, so `firestore.rules` plus the se
 | accounts/{uid} | email and versioned consent | server/team only |
 | profiles/{uid} | private questionnaire answers and current-match pointer; no contact handles | that member only; no collection listing |
 | matches/{id} | participants, curated answer snapshots, actual reasons, separate decisions and match-scoped Instagram handles | participants only; no collection listing |
-| events/{id} | O1 sign-up, O2 completed profile, O3 accept/pass and one mutual-accept transition | server/team only |
+| events/{id} | named sign-up, profile-complete and mutual-accept events; internal match decisions are separately named | server/team only |
 | reports/{uid} | latest report by that member | server/team only |
 | mailJobs/{match_uid} | pending notification job | server/team only |
 
@@ -103,7 +109,7 @@ All client writes are denied. Next.js POST routes verify a Firebase ID token wit
 
 Instagram is not part of the profile questionnaire. A participant can enter or update their match-specific handle only after both decisions are yes; no phone numbers are collected or shared. The demo stores decisions and handles in this browser's local storage.
 
-O1/O2/O3 use deterministic IDs and transaction writes to prevent ordinary retries from double-counting. The second yes creates a per-match `mutual_accept` event. Events are linked to member IDs, not anonymous analytics. Review retention for them along with the other records.
+Server event records use named types such as `sign_up`, `profile_complete`, and one per-match `mutual_accept`; match-decision records are marked internal. Events are linked to member IDs, not anonymous analytics. Review retention for them along with the other records.
 
 ## Run matching by hand (no admin UI)
 

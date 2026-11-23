@@ -8,6 +8,7 @@ import {
   getCandidates,
   getMatch,
   local,
+  recordDemoEvent,
   saveMatchInstagram,
   saveProfile,
 } from "./client";
@@ -35,7 +36,7 @@ async function startDemo() {
   await saveProfile({
     ...blankProfile("demo-you"),
     name: "Alex",
-    interests: ["Music", "Books"],
+    interests: ["Music"],
     looking: "either",
     availability: ["Sunday Evening"],
     completed: true,
@@ -73,7 +74,7 @@ test("pass persists and a different suggestion can receive an independent yes", 
   );
 
   assert.equal(demoOtherAccept(match.id, "demo-you"), true);
-  assert.equal(demoOtherAccept(match.id, "demo-you"), false);
+  assert.equal(demoOtherAccept(match.id, "demo-you"), true);
   assert.equal(
     local().events.filter(
       (event) => event.type === "mutual_accept" && event.matchId === match.id,
@@ -104,8 +105,39 @@ test("mutual yes shares only Casey's fictional handle and survives reload", asyn
   const restored = (await getMatch(matchId, "demo-you")) as Match;
   assert.equal(restored.decisions["demo-you"], "accept");
   assert.equal(restored.decisions["demo-00"], "accept");
-  assert.equal(restored.instagram?.["demo-00"], "fake_casey");
+  assert.equal(restored.instagram?.["demo-00"], "casey.demo.insy440");
   assert.equal(restored.instagram?.["demo-you"], "demo_ayden");
+});
+
+test("editing demo answers reuses Casey and Taylor instead of adding students", async () => {
+  await startDemo();
+  const startingProfiles = local().profiles.length;
+  const initialCasey = getCandidates("demo-you").find(
+    (candidate) => candidate.uid === "demo-00",
+  )!;
+  const profile = local().profiles.find((item) => item.uid === "demo-you")!;
+  await saveProfile({
+    ...profile,
+    interests: ["Art", "Gaming"],
+    availability: ["Saturday Morning"],
+  });
+
+  const updatedCandidates = getCandidates("demo-you");
+  const updatedCasey = updatedCandidates.find(
+    (candidate) => candidate.uid === "demo-00",
+  )!;
+  const updatedTaylor = updatedCandidates.find(
+    (candidate) => candidate.uid === "demo-13",
+  )!;
+  assert.equal(local().profiles.length, startingProfiles);
+  assert.equal(
+    local().profiles.filter((item) => item.uid === "demo-you").length,
+    1,
+  );
+  assert.equal(updatedCasey.name, "Casey");
+  assert.equal(updatedTaylor.name, "Taylor");
+  assert.notDeepEqual(updatedCasey.interests, initialCasey.interests);
+  assert.deepEqual(updatedCasey.availability, ["Saturday Morning"]);
 });
 
 test("legacy demo profile contact fields are removed during storage migration", () => {
@@ -136,7 +168,14 @@ test("legacy demo profile contact fields are removed during storage migration", 
           createdAt: 1,
         },
       ],
-      events: [],
+      events: [
+        { type: "O1", at: 1 },
+        { type: "O2", at: 2 },
+        { type: "O2-update", at: 3 },
+        { type: "join_error", at: 4 },
+        { type: "join_error:non_mcgill_email", at: 5 },
+        { type: "candidate-yes", at: 6 },
+      ],
       reports: [],
       candidateDecisions: {},
     }),
@@ -154,4 +193,18 @@ test("legacy demo profile contact fields are removed during storage migration", 
     false,
   );
   assert.equal(storage.get("mcgill-matched-demo-v1")!.includes("must_not_show"), false);
+  assert.deepEqual(
+    local().events.map((event) => event.type),
+    ["join_error", "demo_internal:candidate_yes"],
+  );
+  assert.equal(local().events[0].reason, "non_mcgill_email");
+  assert.equal(local().events[1].category, "demo_internal");
+});
+
+test("demo join errors keep a single event type and a structured reason", () => {
+  storage.clear();
+  recordDemoEvent("join_error", { reason: "consent_unticked" });
+  assert.deepEqual(local().events.map(({ type, reason }) => ({ type, reason })), [
+    { type: "join_error", reason: "consent_unticked" },
+  ]);
 });

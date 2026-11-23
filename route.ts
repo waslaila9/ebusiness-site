@@ -45,8 +45,8 @@ export async function POST(
             consentVersion: "2026-11-v1",
             consentedAt: Date.now(),
           });
-          tx.create(db.doc(`events/O1_${uid}`), {
-            type: "O1",
+          tx.create(db.doc(`events/sign_up_${uid}`), {
+            type: "sign_up",
             uid,
             at: Date.now(),
           });
@@ -88,8 +88,8 @@ export async function POST(
         const snapshot = await tx.get(ref);
         if (snapshot.exists) tx.set(ref, p);
         else tx.create(ref, p);
-        tx.create(db.doc(`events/O2_${uid}_${Date.now()}`), {
-          type: "O2",
+        tx.create(db.doc(`events/profile_complete_${uid}_${Date.now()}`), {
+          type: "profile_complete",
           uid,
           at: Date.now(),
         });
@@ -116,8 +116,9 @@ export async function POST(
         if (result !== "saved")
           throw new Error("This match is already closed or decided.");
         tx.update(ref, { [`decisions.${uid}`]: m.decisions[uid] });
-        tx.create(db.doc(`events/O3_${b.id}_${uid}`), {
-          type: "O3",
+        tx.create(db.doc(`events/match_decision_${b.id}_${uid}`), {
+          type: "match_decision",
+          category: "internal",
           uid,
           matchId: b.id,
           decision: b.decision,

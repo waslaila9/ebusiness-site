@@ -30,7 +30,6 @@ import {
   saveMatchInstagram,
   demoOtherAccept,
   demoCandidateDecision,
-  resetDemoCandidates,
   getDemoScenario,
   setDemoScenario,
   request,
@@ -42,6 +41,7 @@ import {
   conversationStarter,
   firstPlanSuggestion,
   reasons,
+  sortAvailability,
 } from "./matching";
 import { useSession } from "./session";
 const support = process.env.NEXT_PUBLIC_SUPPORT_EMAIL;
@@ -84,7 +84,11 @@ function MatchConversation({
   sharedAvailability: string[];
 }) {
   const opener = conversationStarter(sharedInterests);
-  const plan = firstPlanSuggestion(sharedAvailability);
+  const orderedSharedAvailability = sortAvailability(sharedAvailability);
+  const shownSharedAvailability = orderedSharedAvailability.slice(0, 2);
+  const moreSharedTimes =
+    orderedSharedAvailability.length - shownSharedAvailability.length;
+  const plan = firstPlanSuggestion(shownSharedAvailability);
   const [copyStatus, setCopyStatus] = useState<
     "idle" | "copied" | "manual"
   >("idle");
@@ -114,7 +118,9 @@ function MatchConversation({
         )}
         {sharedAvailability.length ? (
           <p className="shared-time">
-            <strong>Shared time:</strong> {sharedAvailability.join(", ")}
+            <strong>Shared time:</strong>{" "}
+            {shownSharedAvailability.join(", ")}
+            {moreSharedTimes > 0 && `, and ${moreSharedTimes} more`}
           </p>
         ) : (
           <p className="shared-time">No shared time is listed.</p>
@@ -325,10 +331,12 @@ function Join() {
     [busy, setBusy] = useState(false),
     [login, setLogin] = useState(false),
     [returningProfile, setReturningProfile] = useState<Profile | null>(null),
-    [hasLocalSession, setHasLocalSession] = useState(false);
+    [hasLocalSession, setHasLocalSession] = useState(false),
+    [returningToMatches, setReturningToMatches] = useState(false);
   useEffect(() => {
     const q = new URLSearchParams(location.search);
     setLogin(q.has("login"));
+    setReturningToMatches(safeNext(q.get("next")) === "/matches");
     try {
       setEmail(sessionStorage.getItem("join-email") || "");
       setConsent(sessionStorage.getItem("join-consent") === "true");
@@ -352,27 +360,22 @@ function Join() {
     const errs: Record<string, string> = {};
     if (!normalizedEmail) {
       errs.email = "Add your McGill email.";
-      recordDemoEvent("join_error");
-      recordDemoEvent("join_error:non_mcgill_email");
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
       errs.email = "Enter a complete email address, such as you@mail.mcgill.ca.";
-      recordDemoEvent("join_error");
-      recordDemoEvent("join_error:non_mcgill_email");
     } else if (!isMcGill(normalizedEmail)) {
       errs.email =
         "Use the exact @mail.mcgill.ca student domain, such as you@mail.mcgill.ca.";
-      recordDemoEvent("join_error");
-      recordDemoEvent("join_error:non_mcgill_email");
     }
     if (!consent) {
       errs.consent =
         "Consent is required. Agree to the Privacy policy and Terms of use.";
-      recordDemoEvent("join_error");
-      recordDemoEvent("join_error:consent_unticked");
     }
     setErrors(errs);
     setError("");
     if (Object.keys(errs).length) {
+      recordDemoEvent("join_error", {
+        reason: errs.email ? "non_mcgill_email" : "consent_unticked",
+      });
       requestAnimationFrame(() =>
         document
           .getElementById(errs.email ? "email" : "consent")
@@ -419,6 +422,23 @@ function Join() {
           ? "Welcome back. Resume your browser-local demo if you left a profile or match here."
           : "A familiar face can change your whole week."}
       </p>
+      {returningToMatches && (
+          <Note>
+            <p>Log in or join to see your matches.</p>
+            <div className="join-return-actions">
+              <Link
+                className="button secondary"
+                href="/join?login=1&next=%2Fmatches"
+                onClick={() => setLogin(true)}
+              >
+                Log in
+              </Link>
+              <Link className="quiet-link" href="#join-form">
+                Join
+              </Link>
+            </div>
+          </Note>
+      )}
       {login && demo && (
         <div className="panel">
           {hasLocalSession ? (
@@ -455,7 +475,7 @@ function Join() {
           <Link href="/matches">Go to My matches</Link>.
         </Note>
       )}
-      <form noValidate onSubmit={submit}>
+      <form id="join-form" noValidate onSubmit={submit}>
         <label htmlFor="email">McGill email</label>
         <input
           id="email"
@@ -724,6 +744,7 @@ function ProfileForm() {
     [editing, setEditing] = useState(false),
     [formStarted, setFormStarted] = useState(false);
   const visibilityRef = useRef<HTMLDivElement>(null);
+  const visibilityLoggedRef = useRef(false);
   useEffect(() => {
     if (!user) return;
     getProfile(user.uid)
@@ -756,7 +777,8 @@ function ProfileForm() {
     const element = visibilityRef.current;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry?.isIntersecting) {
+        if (entry?.isIntersecting && !visibilityLoggedRef.current) {
+          visibilityLoggedRef.current = true;
           recordDemoEvent("visibility_note_view");
           observer.disconnect();
         }
@@ -1050,181 +1072,6 @@ function Saved() {
     </section>
   );
 }
-function FindMatches() {
-  const { user } = useSession();
-  const [candidates, setCandidates] = useState<Profile[]>([]);
-  const [index, setIndex] = useState(0);
-  const [loaded, setLoaded] = useState(false);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [hasCurrentMatch, setHasCurrentMatch] = useState(false);
-  async function load() {
-    setError("");
-    try {
-      const profile = await getProfile(user!.uid);
-      setHasCurrentMatch(!!profile?.currentMatch);
-      setCandidates(await getCandidates(user!.uid));
-      setIndex(0);
-      setLoaded(true);
-    } catch {
-      setError("Could not load more matches. Try again.");
-    }
-  }
-  useEffect(() => {
-    if (user) load();
-  }, [user]);
-  const candidate = candidates[index];
-  async function decideCandidate(decision: "accept" | "pass") {
-    if (!candidate || !user || busy) return;
-    setBusy(true);
-    setError("");
-    try {
-      const result = demoCandidateDecision(user.uid, candidate.uid, decision);
-      if (result !== "saved")
-        throw new Error(
-          result === "stale"
-            ? "This suggestion is no longer active. Refresh to see the latest one."
-            : "You already decided on this suggestion.",
-        );
-      setNotice(
-        decision === "pass"
-          ? `Passed on ${candidate.name}. Showing your next suggestion.`
-          : `You said yes to ${candidate.name}. Check My matches for their response.`,
-      );
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save your choice.");
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <section className="content-page page">
-      <div className="member-switcher" role="tablist" aria-label="Match views">
-        <Link href="/matches">My matches</Link>
-        <Link className="active" href="/find" aria-current="page">
-          Find more
-        </Link>
-      </div>
-      <p className="eyebrow">TAKE YOUR TIME</p>
-      <h1>Find more matches</h1>
-      <p className="lead">
-        Look through one profile at a time. Say yes or pass, then keep going.
-      </p>
-      {notice && <p className="decision-notice" role="status">{notice}</p>}
-      {error ? (
-        <>
-          <ErrorBox message={error} />
-          <button className="button" onClick={load}>
-            Try again
-          </button>
-        </>
-      ) : !loaded ? (
-        <p>Finding compatible students…</p>
-      ) : candidate ? (
-        <article className="candidate-card browse-card">
-          <div className="candidate-topline">
-            <span className="eyebrow">COMPATIBLE STUDENT</span>
-            <span className="candidate-count">
-              {index + 1} of {candidates.length}
-            </span>
-          </div>
-          <div className="candidate-identity">
-            <div className="monogram" aria-hidden="true">
-              {candidate.name.slice(0, 1)}
-            </div>
-            <div>
-              <h2>{candidate.name}</h2>
-              <p>Looking for {candidate.looking}</p>
-            </div>
-          </div>
-          <p className="candidate-intro">
-            {candidate.about ||
-              "A McGill student looking for a thoughtful, low-pressure connection."}
-          </p>
-          <div className="chips">
-            {candidate.interests.slice(0, 4).map((interest) => (
-              <span key={interest}>{interest}</span>
-            ))}
-          </div>
-          <details className="candidate-details">
-            <summary>Open profile details</summary>
-            <div className="candidate-detail-grid">
-              <div>
-                  <strong>Usually free</strong>
-                  <p>{candidate.availability.join(" · ")}</p>
-              </div>
-              <div>
-                <strong>Looking for</strong>
-                <p>
-                  {candidate.looking === "friends"
-                    ? "Friends"
-                    : candidate.looking === "dating"
-                      ? "Low-stakes dating"
-                      : "Friends or dating"}
-                </p>
-              </div>
-              <div>
-                <strong>Availability</strong>
-                <p>{candidate.availability.slice(0, 3).join(" · ")}</p>
-              </div>
-            </div>
-          </details>
-          <div className="decision-actions">
-            <button
-              className="button pass-action"
-              disabled={busy}
-              onClick={() => decideCandidate("pass")}
-            >
-              {busy ? "Saving…" : "No, pass"}
-            </button>
-            <button
-              className="button yes-action"
-              disabled={busy}
-              onClick={() => decideCandidate("accept")}
-            >
-              {busy ? "Saving…" : "Yes, interested"} ↗
-            </button>
-          </div>
-          <p className="micro">
-            Your choice stays private. A yes does not share an Instagram handle.
-          </p>
-        </article>
-      ) : (
-        <div className="empty-state">
-          {hasCurrentMatch ? (
-            <>
-              <h2>Your response is saved.</h2>
-              <p>Open My matches to see whether the other student has replied.</p>
-              <Link className="button" href="/matches">
-                Go to My matches
-              </Link>
-            </>
-          ) : (
-            <>
-              <h2>You’ve seen everyone in this demo.</h2>
-              <p>Reset the fictional candidate list and try the flow again.</p>
-              <button
-                className="button"
-                onClick={() => {
-                  resetDemoCandidates();
-                  load();
-                }}
-              >
-                Start over
-              </button>
-            </>
-          )}
-        </div>
-      )}
-      <Note>
-        These are fictional demo profiles. Real students will only appear
-        through verified, server-assigned matches.
-      </Note>
-    </section>
-  );
-}
 function Matches() {
   const { user } = useSession(),
     [p, setP] = useState<Profile | null>(null),
@@ -1235,6 +1082,7 @@ function Matches() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState("");
+  const actionLockRef = useRef(false);
   async function load() {
     setError("");
     try {
@@ -1261,7 +1109,8 @@ function Matches() {
     if (user) load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [user]);
   async function act(decision: "accept" | "pass") {
-    if (!m || !user || busy) return;
+    if (!m || !user || actionLockRef.current) return;
+    actionLockRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -1270,11 +1119,13 @@ function Matches() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save your choice.");
     } finally {
+      actionLockRef.current = false;
       setBusy(false);
     }
   }
   async function actSuggestion(decision: "accept" | "pass") {
-    if (!suggestion || !user || busy) return;
+    if (!suggestion || !user || actionLockRef.current) return;
+    actionLockRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -1283,12 +1134,10 @@ function Matches() {
         suggestion.uid,
         decision,
       );
-      if (result !== "saved")
-        throw new Error(
-          result === "stale"
-            ? "This suggestion is no longer active. Refresh to see the latest one."
-            : "You already decided on this suggestion.",
-        );
+      if (result !== "saved") {
+        await load();
+        return;
+      }
       setNotice(
         decision === "pass"
           ? `Passed on ${suggestion.name}. Showing your next suggestion.`
@@ -1298,11 +1147,13 @@ function Matches() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save your choice.");
     } finally {
+      actionLockRef.current = false;
       setBusy(false);
     }
   }
   async function simulateOtherYes() {
-    if (!m || !user || busy) return;
+    if (!m || !user || actionLockRef.current) return;
+    actionLockRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -1312,47 +1163,18 @@ function Matches() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save the demo response.");
     } finally {
+      actionLockRef.current = false;
       setBusy(false);
     }
   }
   const other = m?.members.find((x) => x !== user?.uid);
   return (
     <section className="content-page page">
-      <div className="member-switcher" role="tablist" aria-label="Match views">
-        <Link className="active" href="/matches" aria-current="page">
-          My matches
-        </Link>
-        <Link href="/find">Find more</Link>
-      </div>
       <Back />
       <p className="eyebrow">ONE THOUGHTFUL INTRODUCTION</p>
       <h1>My matches</h1>
       <p className="lead">A little common ground is a good place to start.</p>
       {notice && <p className="decision-notice" role="status">{notice}</p>}
-      {demo && p?.completed && (
-        <div className="demo-scenarios">
-          <p className="micro">Demo scenarios</p>
-          {(["compatible", "waiting", "no-eligible"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              className="text-btn"
-              aria-pressed={scenario === option}
-              onClick={() => {
-                setDemoScenario(option);
-                setNotice("");
-                load();
-              }}
-            >
-              {option === "compatible"
-                ? "Show compatible suggestion"
-                : option === "waiting"
-                  ? "Show waiting state"
-                  : "Show no-eligible state"}
-            </button>
-          ))}
-        </div>
-      )}
       {error ? (
         <>
           <ErrorBox message={error} />
@@ -1389,14 +1211,20 @@ function Matches() {
             <button
               className="button pass-action"
               disabled={busy}
-              onClick={() => actSuggestion("pass")}
+              onClick={(event) => {
+                if (event.detail > 1) return;
+                actSuggestion("pass");
+              }}
             >
               {busy ? "Saving…" : "No, pass"}
             </button>
             <button
               className="button yes-action"
               disabled={busy}
-              onClick={() => actSuggestion("accept")}
+              onClick={(event) => {
+                if (event.detail > 1) return;
+                actSuggestion("accept");
+              }}
             >
               {busy ? "Saving…" : "Yes, connect"} ↗
             </button>
@@ -1483,8 +1311,9 @@ function Matches() {
             </div>
           )}
           <p className="micro">
-            Your choice is private. Instagram stays unavailable until you both
-            say yes.
+            {bothAccepted(m)
+              ? "You both said yes. Sharing Instagram is optional."
+              : "Your choice is private. Instagram stays unavailable until you both say yes."}
           </p>
         </article>
       ) : (
@@ -1518,6 +1347,31 @@ function Matches() {
         You’re in control. Instagram is available only after mutual acceptance.{" "}
         <Link href="/staying-safe">Read Staying safe</Link>.
       </Note>
+      {demo && p?.completed && (
+        <div className="demo-scenarios">
+          <p className="micro">Demo scenarios</p>
+          <div className="demo-scenario-actions">
+            {(["compatible", "waiting", "no-eligible"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                aria-pressed={scenario === option}
+                onClick={() => {
+                  setDemoScenario(option);
+                  setNotice("");
+                  load();
+                }}
+              >
+                {option === "compatible"
+                  ? "Show compatible suggestion"
+                  : option === "waiting"
+                    ? "Show waiting state"
+                    : "Show no-eligible state"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -1525,10 +1379,11 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
   const { user } = useSession(),
     [m, setM] = useState<Match | null>(null),
     [instagramInput, setInstagramInput] = useState(""),
-    [instagramSaved, setInstagramSaved] = useState(false),
+    [instagramStatus, setInstagramStatus] = useState(""),
     [error, setError] = useState(""),
     [loaded, setLoaded] = useState(false),
     [busy, setBusy] = useState(false);
+  const actionLockRef = useRef(false);
   async function load() {
     setError("");
     try {
@@ -1544,7 +1399,8 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
     if (user) load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [user, id, connected]);
   async function act(decision: "accept" | "pass") {
-    if (busy) return;
+    if (actionLockRef.current) return;
+    actionLockRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -1553,27 +1409,41 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save.");
     } finally {
+      actionLockRef.current = false;
+      setBusy(false);
+    }
+  }
+  async function saveInstagram(input: string) {
+    if (!user || !m || !bothAccepted(m) || actionLockRef.current) return;
+    actionLockRef.current = true;
+    setBusy(true);
+    setError("");
+    setInstagramStatus("");
+    try {
+      await saveMatchInstagram(m.id, user.uid, input);
+      setInstagramStatus(
+        input.trim().replace(/^@/, "")
+          ? "Your match-specific Instagram handle was saved."
+          : "Your match-specific Instagram handle was removed.",
+      );
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save your Instagram.");
+    } finally {
+      actionLockRef.current = false;
       setBusy(false);
     }
   }
   async function submitInstagram(event: FormEvent) {
     event.preventDefault();
-    if (!user || !m || !bothAccepted(m) || busy) return;
-    setBusy(true);
-    setError("");
-    setInstagramSaved(false);
-    try {
-      await saveMatchInstagram(m.id, user.uid, instagramInput);
-      setInstagramSaved(true);
-      await load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not save your Instagram.");
-    } finally {
-      setBusy(false);
-    }
+    await saveInstagram(instagramInput);
+  }
+  async function removeInstagram() {
+    await saveInstagram("");
   }
   async function simulateOtherYes() {
-    if (!user || busy) return;
+    if (!user || actionLockRef.current) return;
+    actionLockRef.current = true;
     setBusy(true);
     setError("");
     try {
@@ -1583,6 +1453,7 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save the demo response.");
     } finally {
+      actionLockRef.current = false;
       setBusy(false);
     }
   }
@@ -1611,7 +1482,8 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
   const other = m.members.find((x) => x !== user!.uid)!,
     card = m.cards[other],
     mine = m.decisions[user!.uid],
-    closed = Object.values(m.decisions).includes("pass");
+    closed = Object.values(m.decisions).includes("pass"),
+    savedHandle = m.instagram?.[user!.uid] || "";
   if (connected)
     return (
       <section className="narrow page">
@@ -1647,17 +1519,29 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
                   placeholder="@your_handle"
                   value={instagramInput}
                   onChange={(event) => {
-                    setInstagramSaved(false);
+                    setInstagramStatus("");
                     setInstagramInput(event.target.value);
                   }}
                   disabled={busy}
                 />
-                <button className="button" disabled={busy}>
-                  {busy ? "Saving…" : instagramInput ? "Save handle" : "Remove handle"}
-                </button>
-                {instagramSaved && (
-                  <p className="success" role="status">
-                    Your match-specific Instagram handle was saved.
+                <div className="instagram-actions">
+                  <button className="button" type="submit" disabled={busy}>
+                    {busy ? "Saving…" : "Save handle"}
+                  </button>
+                  {savedHandle && (
+                    <button
+                      className="button secondary"
+                      type="button"
+                      onClick={removeInstagram}
+                      disabled={busy}
+                    >
+                      Remove handle
+                    </button>
+                  )}
+                </div>
+                {instagramStatus && (
+                  <p className="success" role="status" aria-live="polite">
+                    {instagramStatus}
                   </p>
                 )}
               </form>
@@ -1666,13 +1550,17 @@ function MatchDetail({ id, connected }: { id: string; connected: boolean }) {
               <h2>{card.name}&apos;s Instagram</h2>
               {m.instagram?.[other] ? (
                 <p>
-                  <a
-                    target="_blank"
-                    rel="noreferrer"
-                    href={`https://www.instagram.com/${encodeURIComponent(m.instagram[other])}/`}
-                  >
-                    @{m.instagram[other]}
-                  </a>
+                  {demo ? (
+                    <>@{m.instagram[other]}</>
+                  ) : (
+                    <a
+                      target="_blank"
+                      rel="noreferrer"
+                      href={`https://www.instagram.com/${encodeURIComponent(m.instagram[other])}/`}
+                    >
+                      @{m.instagram[other]}
+                    </a>
+                  )}
                 </p>
               ) : (
                 <p>
@@ -2142,12 +2030,6 @@ export function App({ path }: { path: string }) {
     return (
       <Member>
         <Matches />
-      </Member>
-    );
-  if (path === "/find")
-    return (
-      <Member>
-        <FindMatches />
       </Member>
     );
   if (path.startsWith("/matches/"))

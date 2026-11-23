@@ -23,16 +23,19 @@ import {
 } from "./matching";
 const key = "mcgill-matched-demo-v1";
 export type DemoScenario = "compatible" | "waiting" | "no-eligible";
+type DemoEvent = {
+  type: string;
+  at: number;
+  matchId?: string;
+  candidateUid?: string;
+  reason?: "non_mcgill_email" | "consent_unticked";
+  category?: "demo_internal";
+};
 type State = {
   user: User | null;
   profiles: Profile[];
   matches: Match[];
-  events: {
-    type: string;
-    at: number;
-    matchId?: string;
-    candidateUid?: string;
-  }[];
+  events: DemoEvent[];
   reports: string[];
   candidateDecisions: Record<string, "accept" | "pass">;
   demoScenario?: DemoScenario;
@@ -59,6 +62,68 @@ function savedMatch(match: Match): Match {
 }
 const candidateDecisionKey = (uid: string, candidateUid: string) =>
   `${uid}:${candidateUid}`;
+function cleanEvents(events: DemoEvent[]) {
+  const cleaned: DemoEvent[] = [];
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index];
+    if (!event || typeof event.type !== "string") continue;
+    if (
+      ["O1", "O2", "O2-update"].includes(event.type) ||
+      event.type.startsWith("join_error:")
+    )
+      continue;
+    if (event.type === "join_error") {
+      if (
+        event.reason === "non_mcgill_email" ||
+        event.reason === "consent_unticked"
+      ) {
+        cleaned.push(event);
+        continue;
+      }
+      const oldReason = events[index + 1]?.type;
+      if (
+        oldReason === "join_error:non_mcgill_email" ||
+        oldReason === "join_error:consent_unticked"
+      ) {
+        cleaned.push({
+          ...event,
+          reason:
+            oldReason === "join_error:non_mcgill_email"
+              ? "non_mcgill_email"
+              : "consent_unticked",
+        });
+        index += 1;
+      }
+      continue;
+    }
+    if (event.type === "O3") {
+      cleaned.push({
+        ...event,
+        type: "demo_internal:match_decision",
+        category: "demo_internal",
+      });
+      continue;
+    }
+    if (event.type === "candidate-yes" || event.type === "candidate-pass") {
+      cleaned.push({
+        ...event,
+        type: `demo_internal:${event.type.replace("-", "_")}`,
+        category: "demo_internal",
+      });
+      continue;
+    }
+    if (event.type.startsWith("demo-scenario-")) {
+      cleaned.push({
+        ...event,
+        type: `demo_internal:${event.type}`,
+        category: "demo_internal",
+      });
+      continue;
+    }
+    cleaned.push(event);
+  }
+  return cleaned;
+}
 export function local(): State {
   const raw = localStorage.getItem(key);
   if (raw) {
@@ -67,7 +132,7 @@ export function local(): State {
       ...state,
       profiles: (state.profiles || []).map(savedProfile),
       matches: (state.matches || []).map(savedMatch),
-      events: state.events || [],
+      events: cleanEvents(state.events || []),
       reports: state.reports || [],
       candidateDecisions: state.candidateDecisions || {},
     } as State;
@@ -88,17 +153,18 @@ export function write(s: State) {
   localStorage.setItem(key, JSON.stringify(s));
   window.dispatchEvent(new Event("demo-auth"));
 }
-export function recordDemoEvent(type: string) {
+export function recordDemoEvent(
+  type: string,
+  details: Pick<DemoEvent, "reason"> = {},
+) {
   if (!demo) return;
   const s = local();
-  s.events.push({ type, at: Date.now() });
+  s.events.push({ type, ...details, at: Date.now() });
   write(s);
 }
 export function demoLogin(email: string) {
   const s = local();
   s.user = { uid: "demo-you", email };
-  if (!s.events.some((e) => e.type === "O1"))
-    s.events.push({ type: "O1", at: Date.now() });
   write(s);
 }
 export async function request(route: string, data: unknown) {
@@ -180,7 +246,11 @@ export function demoCandidateDecision(
 
   s.candidateDecisions[decisionKey] = decision;
   s.events.push({
-    type: decision === "accept" ? "candidate-yes" : "candidate-pass",
+    type:
+      decision === "accept"
+        ? "demo_internal:candidate_yes"
+        : "demo_internal:candidate_pass",
+    category: "demo_internal",
     candidateUid,
     at: Date.now(),
   });
@@ -223,12 +293,6 @@ export function demoCandidateDecision(
   write(s);
   return "saved";
 }
-export function resetDemoCandidates() {
-  if (!demo) return;
-  const s = local();
-  s.candidateDecisions = {};
-  write(s);
-}
 export function getDemoScenario(): DemoScenario {
   return demo ? (local().demoScenario || "compatible") : "compatible";
 }
@@ -241,7 +305,11 @@ export function setDemoScenario(scenario: DemoScenario) {
   s.profiles.forEach((profile) => {
     profile.currentMatch = null;
   });
-  s.events.push({ type: `demo-scenario-${scenario}`, at: Date.now() });
+  s.events.push({
+    type: `demo_internal:demo-scenario-${scenario}`,
+    category: "demo_internal",
+    at: Date.now(),
+  });
   write(s);
 }
 export async function saveProfile(p: Profile) {
@@ -259,7 +327,6 @@ export async function saveProfile(p: Profile) {
       completed: true,
       currentMatch: existing.currentMatch,
     });
-    s.events.push({ type: "O2-update", at: Date.now() });
     write(s);
     return;
   }
@@ -267,7 +334,6 @@ export async function saveProfile(p: Profile) {
     ...cleanProfile,
     completed: true,
   });
-  s.events.push({ type: "O2", at: Date.now() });
   write(s);
 }
 export async function getMatch(id: string, uid: string): Promise<Match | null> {
@@ -289,6 +355,7 @@ export async function decide(
   const m = s.matches.find((x) => x.id === id && x.members.includes(uid));
   if (!m) throw new Error("Match not found.");
   const wasMutual = bothAccepted(m);
+  if (m.decisions[uid] === decision) return;
   const result = applyMatchDecision(m, uid, decision);
   if (result !== "saved")
     throw new Error(
@@ -296,7 +363,11 @@ export async function decide(
         ? "This match is already closed."
         : "You already decided.",
     );
-  s.events.push({ type: "O3", at: Date.now() });
+  s.events.push({
+    type: "demo_internal:match_decision",
+    category: "demo_internal",
+    at: Date.now(),
+  });
   if (
     !wasMutual &&
     bothAccepted(m) &&
@@ -334,7 +405,9 @@ export function demoOtherAccept(id: string, uid: string): boolean {
   const match = s.matches.find((item) => item.id === id);
   if (!match || match.decisions[uid] !== "accept") return false;
   const other = match.members.find((member) => member !== uid);
-  if (!other || match.decisions[other] !== "pending") return false;
+  if (!other) return false;
+  if (match.decisions[other] === "accept") return true;
+  if (match.decisions[other] !== "pending") return false;
   const result = applyMatchDecision(match, other, "accept");
   if (result !== "saved") return false;
   const instagram = demoInstagramFor(other);

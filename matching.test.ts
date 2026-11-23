@@ -18,8 +18,10 @@ import {
 } from "./matching";
 import {
   bothAccepted,
+  days,
   isMcGill,
   safeNext,
+  times,
   validateProfile,
   Profile,
 } from "./model";
@@ -42,7 +44,7 @@ test("post-login return paths cannot become external redirects", () => {
 test("matching uses looking-for compatibility and never duplicates a member", () => {
   const p = fakeStudents(),
     out = pairProfiles(p);
-  assert.equal(out.length, 6);
+  assert.equal(out.length, 5);
   const seen = new Set();
   for (const m of out) {
     for (const uid of m.members) {
@@ -77,6 +79,18 @@ test("each pair is mutual best with stable tie breaks on its round", () => {
     }
     remaining = remaining.filter((x) => !pair.members.includes(x.uid));
   }
+});
+test("shared availability is weekday and time ordered without truncating its score", () => {
+  const [a, b] = fakeStudents();
+  const allSlots = days.flatMap((day) =>
+    times.map((time) => `${day} ${time}`),
+  );
+  a.looking = "friends";
+  b.looking = "friends";
+  a.availability = [...allSlots].reverse();
+  b.availability = [...allSlots];
+  assert.deepEqual(reasons(a, b).sharedAvailability, allSlots);
+  assert.equal(score(a, b), allSlots.length);
 });
 test("already paired and incomplete profiles are excluded", () => {
   const p = fakeStudents();
@@ -178,27 +192,55 @@ test("ranking excludes current, passed, and ineligible profiles with stable UID 
   assert.deepEqual(ranked.map((profile) => profile.uid), ["demo-a", "demo-b"]);
 });
 
-test("compatible demo student preserves profile fields and ranks first", () => {
+test("demo fixtures partially overlap and rank reproducibly for different answers", () => {
   const me = fakeStudents()[0];
   me.uid = "demo-you";
-  me.looking = "either";
+  me.looking = "friends";
   me.interests = ["Music", "Books"];
-  me.availability = ["Sunday Evening"];
-  const candidate = compatibleDemoStudent(me);
-  const ranked = rankCandidates(me, [...fakeStudents(), candidate]);
-
-  assert.equal(candidate.uid, "demo-00");
-  assert.equal(lookingMatches(me, candidate), true);
-  assert.deepEqual(reasons(me, candidate), {
-    sharedInterests: ["Books", "Music"],
-    sharedAvailability: ["Sunday Evening"],
-  });
-  assert.equal(ranked[0].uid, candidate.uid);
+  me.availability = ["Friday Evening", "Wednesday Afternoon"];
+  const casey = compatibleDemoStudent(me);
+  const taylor = noHandleDemoStudent(me);
+  assert.equal(casey.uid, "demo-00");
+  assert.equal(casey.name, "Casey");
+  assert.equal(lookingMatches(me, casey), true);
   assert.equal(
-    rankCandidates(me, [noHandleDemoStudent(me), candidate])[1].uid,
-    "demo-13",
+    reasons(me, casey).sharedInterests.length < me.interests.length,
+    true,
   );
-  assert.equal(demoInstagramFor(candidate.uid), "fake_casey");
+  assert.ok(casey.interests.some((interest) => !me.interests.includes(interest)));
+  assert.equal(reasons(me, casey).sharedAvailability.length, 1);
+  assert.equal(taylor.uid, "demo-13");
+  assert.equal(taylor.name, "Taylor");
+  assert.equal(lookingMatches(me, taylor), true);
+
+  const firstScenario = rankCandidates(me, [
+    ...fakeStudents(),
+    casey,
+    taylor,
+  ])[0];
+  assert.equal(firstScenario.uid, "demo-01");
+  assert.deepEqual(reasons(me, firstScenario), {
+    sharedInterests: ["Books", "Music"],
+    sharedAvailability: ["Wednesday Afternoon", "Friday Evening"],
+  });
+
+  const secondProfile = {
+    ...me,
+    interests: ["Art", "Gaming"],
+    availability: ["Saturday Morning"],
+  };
+  const secondScenario = rankCandidates(secondProfile, [
+    ...fakeStudents(),
+    compatibleDemoStudent(secondProfile),
+    noHandleDemoStudent(secondProfile),
+  ])[0];
+  assert.equal(secondScenario.uid, "demo-04");
+  assert.deepEqual(reasons(secondProfile, secondScenario), {
+    sharedInterests: ["Art", "Gaming"],
+    sharedAvailability: ["Saturday Morning"],
+  });
+  assert.equal(rankCandidates(me, [taylor, casey])[1].uid, "demo-13");
+  assert.equal(demoInstagramFor(casey.uid), "casey.demo.insy440");
   assert.equal(demoInstagramFor("demo-13"), null);
 });
 
@@ -212,7 +254,7 @@ test("conversation starter and plan use only shared ranking inputs", () => {
     "Hey! What has been the best surprise about McGill so far?",
   );
   assert.equal(
-    firstPlanSuggestion(["Wednesday Afternoon"]),
+    firstPlanSuggestion(["Wednesday Afternoon", "Friday Evening"]),
     "During Wednesday Afternoon, suggest a 20-minute coffee at a public café near campus.",
   );
   assert.equal(firstPlanSuggestion([]), null);

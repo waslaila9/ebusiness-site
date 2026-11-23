@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { App } from "./app";
 export default async function Page({
   params,
@@ -6,6 +6,7 @@ export default async function Page({
   params: Promise<{ slug?: string[] }>;
 }) {
   const p = "/" + ((await params).slug || []).join("/");
+  if (p === "/find") redirect("/matches");
   if (
     ![
       "/",
@@ -15,7 +16,6 @@ export default async function Page({
       "/profile",
       "/profile/saved",
       "/matches",
-      "/find",
       "/staying-safe",
       "/questions",
       "/privacy",
@@ -42,7 +42,6 @@ export async function generateMetadata({
     "/profile": "My profile",
     "/profile/saved": "Profile saved",
     "/matches": "My matches",
-    "/find": "Find more matches",
     "/staying-safe": "Staying safe",
     "/questions": "Questions",
     "/privacy": "Privacy policy",

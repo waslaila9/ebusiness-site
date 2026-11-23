@@ -709,6 +709,17 @@ footer {
 .note p:last-child {
   margin-bottom: 0;
 }
+.join-return-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 10px;
+}
+.join-return-actions .button {
+  min-height: 40px;
+  padding: 8px 16px;
+}
 form {
   margin: 30px 0;
 }
@@ -1535,6 +1546,13 @@ input[type="radio"] {
   color: var(--ink);
   border: 1px solid var(--line);
 }
+.pass-action:hover,
+.pass-action:focus-visible,
+.pass-action:active {
+  background: var(--blush);
+  color: var(--ink);
+  border-color: #d7b7bc;
+}
 .yes-action {
   background: var(--red);
   color: #fff;
@@ -1554,6 +1572,36 @@ input[type="radio"] {
   background: var(--pale);
   color: var(--ink);
 }
+.demo-scenarios {
+  max-width: 720px;
+  margin: 20px auto 0;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--pale);
+}
+.demo-scenarios > .micro {
+  margin: 0 0 8px;
+}
+.demo-scenario-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.demo-scenario-actions button {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #d7b7bc;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--link);
+  font-size: 12px;
+  font-weight: 600;
+}
+.demo-scenario-actions button:hover,
+.demo-scenario-actions button[aria-pressed="true"] {
+  background: var(--blush);
+}
 .success {
   color: #17613a;
   font-size: 13px;
@@ -1566,6 +1614,11 @@ input[type="radio"] {
 .panel form > input {
   width: 100%;
   margin-bottom: 12px;
+}
+.instagram-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 .match-conversation {
   display: grid;
